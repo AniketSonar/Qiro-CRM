@@ -17,6 +17,7 @@ import {
 } from "../components/crm/form";
 import { currency } from "../lib/crm-data";
 import { crud, useLookups, useSales } from "../lib/crm-store";
+import { downloadInvoicePdf, shareInvoicePdf } from "../lib/quotation";
 
 const PAY_STATUS = ["PENDING", "PARTIAL", "PAID", "CANCELLED"];
 const PAY_METHOD = ["CASH", "CARD", "UPI", "BANK_TRANSFER", "CHEQUE"];
@@ -256,6 +257,14 @@ export default function Sales() {
                 <Td className="text-right">
                   <RowMenu
                     items={[
+                      {
+                        label: "Download Invoice PDF",
+                        onSelect: () => downloadInvoicePdf(r)
+                      },
+                      {
+                        label: "Share Invoice",
+                        onSelect: () => shareInvoicePdf(r)
+                      },
                       { label: "Edit sale", onSelect: () => setForm({ mode: "edit", sale: r }) },
                       {
                         label: "Mark paid",

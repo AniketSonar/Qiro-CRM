@@ -40,10 +40,13 @@ import { currency } from "../lib/crm-data";
 import {
   addAttachment,
   downloadAttachment,
+  downloadInvoicePdf,
   humanSize,
   listAttachments,
   removeAttachment,
-  shareAttachment
+  shareAttachment,
+  shareInvoicePdf,
+  shareQuotationPdf
 } from "../lib/quotation";
 import {
   crud,
@@ -413,13 +416,14 @@ function TouchCard({ row, onComplete, onCancel, onEdit }) {
 }
 
 
-function DocumentCard({ deal, documentType, onEdit, onStage }) {
+function DocumentCard({ deal, lead, documentType, onEdit, onStage }) {
   const fileInput = useRef(null);
   const [files, setFiles] = useState(() => listAttachments(deal.id, documentType));
   const [error, setError] = useState(null);
   const [busy, setBusy] = useState(false);
   const isQuotation = documentType === "quotation";
   const title = isQuotation ? "Quotation" : "Invoice";
+  const preparedBy = { name: deal.assigned_user || "Sales Representative" };
 
   const pick = async (event) => {
     const file = event.target.files?.[0];
@@ -433,17 +437,27 @@ function DocumentCard({ deal, documentType, onEdit, onStage }) {
     }
   };
 
-  const share = async () => {
-    if (!files[0]) {
-      setError(`Attach the ${title.toLowerCase()} PDF first`);
-      return;
+  const generateAndDownload = () => {
+    if (isQuotation) {
+      shareQuotationPdf({ deal, lead, preparedBy });
+    } else {
+      downloadInvoicePdf(deal, lead?.company || lead?.first_name);
     }
+  };
+
+  const share = async () => {
     setBusy(true);
     setError(null);
     try {
-      await shareAttachment(files[0], title);
+      if (files[0]) {
+        await shareAttachment(files[0], title);
+      } else if (isQuotation) {
+        await shareQuotationPdf({ deal, lead, preparedBy });
+      } else {
+        await shareInvoicePdf(deal, lead?.company || lead?.first_name);
+      }
     } catch (err) {
-      setError(err?.message ?? "Could not build the PDF");
+      setError(err?.message ?? "Could not build or share the PDF");
     } finally {
       setBusy(false);
     }
@@ -488,18 +502,21 @@ function DocumentCard({ deal, documentType, onEdit, onStage }) {
       <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-border pt-4">
         <button
           type="button"
-          onClick={share}
+          onClick={generateAndDownload}
           disabled={busy}
           className="brand-surface inline-flex h-10 items-center gap-2 rounded-xl px-4 text-sm font-semibold text-primary-foreground disabled:opacity-60"
         >
-          <Share2 className="size-4" /> {busy ? "Sharing…" : `Share ${title.toLowerCase()} PDF`}
+          <FileDown className="size-4" /> Download {title} PDF
         </button>
+        <GhostButton onClick={share} disabled={busy}>
+          <Share2 className="size-4" /> Share
+        </GhostButton>
         <GhostButton onClick={() => fileInput.current?.click()}>
-          <Paperclip className="size-4" /> Attach file
+          <Paperclip className="size-4" /> Attach custom PDF
         </GhostButton>
         <input ref={fileInput} type="file" className="hidden" onChange={pick} />
         <span className="text-xs text-muted-foreground">
-          Select the {title.toLowerCase()} PDF from your device
+          {files.length > 0 ? `${files.length} custom file(s) attached` : `Instant 1-click ${title.toLowerCase()} generation or upload external PDF`}
         </span>
       </div>
 
@@ -733,6 +750,7 @@ export default function LeadDetail() {
             <DocumentCard
               key={d.id}
               deal={d}
+              lead={lead}
               documentType="quotation"
               onEdit={setDealForm}
               onStage={(deal, next) => {
@@ -757,6 +775,7 @@ export default function LeadDetail() {
             <DocumentCard
               key={`invoice-${d.id}`}
               deal={d}
+              lead={lead}
               documentType="invoice"
               onEdit={setDealForm}
               onStage={(deal, next) => {
