@@ -5,12 +5,11 @@ import { AppShell, GhostButton } from "../components/crm/AppShell";
 import {
   Avatar,
   Chip,
-  initialsOf,
   leadTemperature,
   leadTemperatureTone,
   stageTone
 } from "../components/crm/ui-bits";
-import { FilterPills, SearchField, Select } from "../components/crm/form";
+import { FilterPills, SearchField } from "../components/crm/form";
 import { currency } from "../lib/crm-data";
 import { crud, invalidate, useLookups, usePipeline } from "../lib/crm-store";
 import { LeadForm } from "./Leads";
@@ -27,6 +26,18 @@ const STATUS_OF_STAGE = {
 
 const STAGES = Object.keys(STATUS_OF_STAGE);
 const PIPELINE_FILTERS = ["All", ...STAGES];
+
+const leadArrival = (lead) => {
+  if (!lead.updatedAt) return lead.updated || "—";
+  const timestamp = new Date(lead.updatedAt).getTime();
+  if (Number.isNaN(timestamp)) return lead.updated || "—";
+
+  const elapsedMinutes = Math.max(0, Math.floor((Date.now() - timestamp) / 60000));
+  if (elapsedMinutes < 1) return "just now";
+  if (elapsedMinutes < 60) return `${elapsedMinutes} min ago`;
+  if (elapsedMinutes < 24 * 60) return `${Math.floor(elapsedMinutes / 60)}h ago`;
+  return new Date(timestamp).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+};
 
 export default function Pipeline() {
   const { leads, pipelineStages, loading } = usePipeline();
@@ -110,11 +121,18 @@ export default function Pipeline() {
                   </span>
                 </div>
 
+                <button
+                  onClick={() => setQuick(col.stage)}
+                  className="mb-3 inline-flex h-9 w-full items-center justify-center gap-2 rounded-xl border border-dashed border-border text-xs font-semibold text-muted-foreground transition-colors hover:border-ring hover:text-foreground"
+                >
+                  <Plus className="size-4" /> Add card
+                </button>
+
                 <div
                   className={
                     stageFilter === "All"
                       ? "space-y-3"
-                      : "grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
+                      : "grid grid-cols-1 items-start gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
                   }
                 >
                   {cards.map((c) => (
@@ -129,49 +147,57 @@ export default function Pipeline() {
                           navigate(`/leads/${c.id}`);
                         }
                       }}
-                      className="panel p-4 transition-transform hover:-translate-y-0.5 hover:shadow-float"
+                      className="panel group p-3 transition-transform hover:-translate-y-0.5 hover:shadow-float"
                     >
                       <div className="flex items-start justify-between gap-2">
-                        <p className="text-sm font-bold leading-tight">{c.company}</p>
-                        <Avatar initials={initialsOf(c.owner)} className="size-7" />
-                      </div>
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        {c.name} · {c.city}
-                      </p>
-                      <p className="numeric mt-3 font-display text-lg font-extrabold">
-                        {currency(c.value)}
-                      </p>
-                      <div className="mt-3 flex items-center justify-between gap-2">
-                        <div className="flex items-center gap-2">
-                          <Chip tone="info">{c.source}</Chip>
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-bold leading-tight text-primary">{c.name}</p>
+                          <p className="mt-1 truncate text-xs text-muted-foreground">{c.company || "—"}</p>
+                        </div>
+                        <div className="flex shrink-0 flex-col items-end gap-1">
                           <Chip tone={leadTemperatureTone(leadTemperature(c))} dot>
                             {leadTemperature(c)}
                           </Chip>
                         </div>
-                        <span className="text-[11px] text-muted-foreground">{c.updated}</span>
                       </div>
-                      <Select
-                        className="mt-3 h-8 text-xs font-semibold"
-                        value={col.stage}
-                        onClick={(e) => e.stopPropagation()}
-                        onChange={(e) => crud.leads.setStatus(c.id, STATUS_OF_STAGE[e.target.value])}
-                      >
-                        {STAGES.map((s) => (
-                          <option key={s} value={s}>
-                            Move to {s}
-                          </option>
-                        ))}
-                      </Select>
+                      <div className="mt-2 flex items-center justify-between gap-2">
+                        <p className="numeric text-base font-extrabold">{currency(c.value)}</p>
+                        <span className="text-[11px] text-muted-foreground">{leadArrival(c)}</span>
+                      </div>
+                      <div className="mt-2 max-h-0 overflow-hidden opacity-0 transition-all duration-200 group-hover:max-h-96 group-hover:opacity-100 group-focus:max-h-96 group-focus:opacity-100">
+                        <div className="mt-3 grid grid-cols-2 gap-x-3 gap-y-2 border-t border-border pt-3 text-xs">
+                          <div className="col-span-2 min-w-0">
+                            <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Email</p>
+                            <p className="truncate font-medium">{c.email || "—"}</p>
+                          </div>
+                          <div>
+                            <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Phone</p>
+                            <p className="font-medium">{c.phone || "—"}</p>
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Company</p>
+                            <p className="truncate font-medium">{c.company || "—"}</p>
+                          </div>
+                          <div>
+                            <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Amount</p>
+                            <p className="numeric font-bold">{currency(c.value)}</p>
+                          </div>
+                          <div>
+                            <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Source</p>
+                            <p className="truncate font-medium">{c.source || "—"}</p>
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Assigned to</p>
+                            <p className="truncate font-medium">{c.owner || "—"}</p>
+                          </div>
+                          <div>
+                            <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Stage</p>
+                            <Chip tone={stageTone(c.stage)} dot>{c.stage}</Chip>
+                          </div>
+                        </div>
+                      </div>
                     </article>
                   ))}
-                  <button
-                    onClick={() => setQuick(col.stage)}
-                    className={`w-full rounded-xl border border-dashed border-border py-2.5 text-xs font-semibold text-muted-foreground transition-colors hover:border-ring hover:text-foreground ${
-                      stageFilter === "All" ? "" : "sm:col-span-2 lg:col-span-3 xl:col-span-4"
-                    }`}
-                  >
-                    + Add card
-                  </button>
                 </div>
               </div>
             </div>

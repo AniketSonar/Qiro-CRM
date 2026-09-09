@@ -136,6 +136,7 @@ const mapLeads = (res) =>
     source: l.source || "Direct",
     owner: l.assigned_user || "Unassigned",
     score: l.score == null ? null : Number(l.score),
+    updatedAt: l.updated_at || l.created_at || null,
     updated: relative(l.updated_at || l.created_at),
     raw: l
   }));
