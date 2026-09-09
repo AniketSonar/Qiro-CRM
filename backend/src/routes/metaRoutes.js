@@ -627,6 +627,10 @@ router.get("/status", async (req, res) => {
             autoAssign: {
                 strategy: "Round-robin / Least active leads",
                 availableSalespersons: salespersons.rows
+            },
+            diagnostics: {
+                hasPageAccessToken: !!process.env.META_PAGE_ACCESS_TOKEN,
+                tokenPrefix: process.env.META_PAGE_ACCESS_TOKEN ? process.env.META_PAGE_ACCESS_TOKEN.substring(0, 10) + "..." : null
             }
         });
     } catch (error) {
