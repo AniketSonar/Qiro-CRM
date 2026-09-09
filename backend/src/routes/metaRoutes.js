@@ -185,31 +185,42 @@ const parseMetaFieldData = (fieldData = []) => {
     const fields = {};
     const customQuestions = [];
 
+    const cleanVal = (val, maxLen = 100) => {
+        if (!val) return null;
+        let s = String(val).trim();
+        // Replace Meta Lead Ads test tool dummy placeholder strings with clean demo data
+        if (s.includes("<test lead: dummy data for full_name>")) s = "Demo Lead";
+        if (s.includes("<test lead: dummy data for phone_number>")) s = "+91 98765 43210";
+        if (s.includes("<test lead: dummy data for")) s = s.replace(/<test lead: dummy data for (.*?)>/g, "$1").trim();
+        return s.substring(0, maxLen);
+    };
+
     for (const item of fieldData) {
         const name = (item.name || "").toLowerCase().trim();
-        const value = Array.isArray(item.values) ? item.values[0] : item.values;
-        if (!value) continue;
+        const rawVal = Array.isArray(item.values) ? item.values[0] : item.values;
+        if (!rawVal) continue;
+        const value = cleanVal(rawVal);
 
         if (name === "full_name") {
-            fields.full_name = String(value).trim();
+            fields.full_name = value;
         } else if (name === "first_name") {
-            fields.first_name = String(value).trim();
+            fields.first_name = value;
         } else if (name === "last_name") {
-            fields.last_name = String(value).trim();
+            fields.last_name = value;
         } else if (name === "email") {
-            fields.email = String(value).trim().toLowerCase();
+            fields.email = cleanVal(rawVal, 255)?.toLowerCase();
         } else if (name === "phone_number" || name === "phone") {
-            fields.phone = String(value).replace(/^p:/i, "").trim();
+            fields.phone = cleanVal(rawVal, 50)?.replace(/^p:/i, "").trim();
         } else if (name === "company_name" || name === "company") {
-            fields.company = String(value).trim();
+            fields.company = cleanVal(rawVal, 150);
         } else if (name === "job_title" || name === "designation" || name === "title") {
-            fields.designation = String(value).trim();
+            fields.designation = cleanVal(rawVal, 150);
         } else if (name === "city") {
-            fields.city = String(value).trim();
+            fields.city = cleanVal(rawVal, 100);
         } else if (name === "whatsapp" || name === "whatsapp_number") {
-            fields.whatsapp = String(value).replace(/^p:/i, "").trim();
+            fields.whatsapp = cleanVal(rawVal, 50)?.replace(/^p:/i, "").trim();
         } else {
-            customQuestions.push(`${item.name}: ${value}`);
+            customQuestions.push(`${item.name}: ${cleanVal(rawVal, 200)}`);
         }
     }
 
