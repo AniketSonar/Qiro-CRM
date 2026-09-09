@@ -1,8 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { Filter, Download, Plus, Share2 } from "lucide-react";
+import { Filter, Download, Plus } from "lucide-react";
 import { AppShell, GhostButton, TableShell, Td, Th } from "../components/crm/AppShell";
-import { MetaAdsModal } from "../components/crm/MetaAdsModal";
 import {
   Avatar,
   Chip,
@@ -181,7 +180,6 @@ export default function Leads() {
   const [form, setForm] = useState(null); // {mode, lead}
   const [assign, setAssign] = useState(null);
   const [remove, setRemove] = useState(null);
-  const [metaAdsOpen, setMetaAdsOpen] = useState(false);
 
   useEffect(() => {
     if (params.get("new") === "1") {
@@ -248,13 +246,6 @@ export default function Leads() {
           <GhostButton onClick={exportCsv}>
             <Download className="size-4" /> Export
           </GhostButton>
-          <button
-            type="button"
-            onClick={() => setMetaAdsOpen(true)}
-            className="inline-flex h-10 items-center gap-2 rounded-xl border border-rose-500/30 bg-rose-500/10 px-3.5 text-sm font-semibold text-rose-600 transition-colors hover:bg-rose-500/20 dark:text-rose-400"
-          >
-            <Share2 className="size-4" /> Meta / Instagram Ads
-          </button>
           <button
             onClick={() => setForm({ mode: "create" })}
             className="brand-surface inline-flex h-10 items-center gap-2 rounded-xl px-4 text-sm font-semibold text-primary-foreground"
@@ -337,9 +328,19 @@ export default function Leads() {
                 </Td>
                 <Td className="numeric text-right font-bold">{currency(l.value)}</Td>
                 <Td>
-                  {/instagram|meta/i.test(l.source) ? (
+                  {/instagram/i.test(l.source) ? (
                     <span className="inline-flex items-center gap-1.5 rounded-full bg-rose-500/10 px-2.5 py-0.5 text-xs font-semibold text-rose-600 dark:text-rose-400 border border-rose-500/20">
                       <span className="size-1.5 rounded-full bg-rose-500" />
+                      {l.source}
+                    </span>
+                  ) : /facebook|meta/i.test(l.source) ? (
+                    <span className="inline-flex items-center gap-1.5 rounded-full bg-blue-500/10 px-2.5 py-0.5 text-xs font-semibold text-blue-600 dark:text-blue-400 border border-blue-500/20">
+                      <span className="size-1.5 rounded-full bg-blue-500" />
+                      {l.source}
+                    </span>
+                  ) : /linkedin/i.test(l.source) ? (
+                    <span className="inline-flex items-center gap-1.5 rounded-full bg-sky-500/10 px-2.5 py-0.5 text-xs font-semibold text-sky-600 dark:text-sky-400 border border-sky-500/20">
+                      <span className="size-1.5 rounded-full bg-sky-500" />
                       {l.source}
                     </span>
                   ) : (
@@ -393,10 +394,6 @@ export default function Leads() {
         message={remove ? `${remove.name} and their history will be removed. This cannot be undone.` : ""}
         onClose={() => setRemove(null)}
         onConfirm={() => crud.leads.remove(remove.id)}
-      />
-      <MetaAdsModal
-        open={metaAdsOpen}
-        onClose={() => setMetaAdsOpen(false)}
       />
     </AppShell>
   );
