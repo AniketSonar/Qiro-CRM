@@ -1,0 +1,236 @@
+@import "tailwindcss" source(none);
+@source "./";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+/*
+ * QIRO CRM design system.
+ * Light, airy sky-blue workspace with a soft blue rail.
+ * All colors are oklch tokens. Never hardcode colors in components.
+ */
+
+@theme inline {
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --radius-2xl: calc(var(--radius) + 8px);
+  --radius-3xl: calc(var(--radius) + 12px);
+  --radius-4xl: calc(var(--radius) + 16px);
+
+  --font-display: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "Manrope", ui-sans-serif, system-ui, sans-serif;
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary-soft: var(--primary-soft);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-success-soft: var(--success-soft);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-warning-soft: var(--warning-soft);
+  --color-info: var(--info);
+  --color-info-soft: var(--info-soft);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-ring-offset-background: var(--background);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-rail: var(--rail);
+  --color-rail-foreground: var(--rail-foreground);
+  --color-rail-muted: var(--rail-muted);
+  --color-rail-hover: var(--rail-hover);
+  --color-sidebar: var(--rail);
+  --color-sidebar-foreground: var(--rail-foreground);
+  --color-sidebar-primary: var(--primary);
+  --color-sidebar-primary-foreground: var(--primary-foreground);
+  --color-sidebar-accent: var(--rail-hover);
+  --color-sidebar-accent-foreground: var(--rail-foreground);
+  --color-sidebar-border: var(--rail-hover);
+  --color-sidebar-ring: var(--ring);
+}
+
+:root {
+  --radius: 0.875rem;
+
+  --background: oklch(0.975 0.014 224);
+  --foreground: oklch(0.32 0.03 250);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.32 0.03 250);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.32 0.03 250);
+
+  --primary: oklch(0.72 0.135 229);
+  --primary-foreground: oklch(0.99 0.005 220);
+  --primary-soft: oklch(0.94 0.035 224);
+
+  --secondary: oklch(0.955 0.02 224);
+  --secondary-foreground: oklch(0.42 0.04 250);
+
+  --muted: oklch(0.955 0.018 224);
+  --muted-foreground: oklch(0.58 0.024 245);
+
+  --accent: oklch(0.93 0.038 224);
+  --accent-foreground: oklch(0.4 0.09 229);
+
+  --destructive: oklch(0.66 0.16 22);
+  --destructive-foreground: oklch(0.99 0.005 220);
+
+  --success: oklch(0.68 0.11 162);
+  --success-foreground: oklch(0.99 0.005 220);
+  --success-soft: oklch(0.955 0.04 162);
+
+  --warning: oklch(0.78 0.12 72);
+  --warning-foreground: oklch(0.32 0.05 60);
+  --warning-soft: oklch(0.965 0.045 82);
+
+  --info: oklch(0.72 0.135 229);
+  --info-soft: oklch(0.93 0.038 224);
+
+  --border: oklch(0.9 0.024 224);
+  --input: oklch(0.9 0.024 224);
+  --ring: oklch(0.72 0.135 229);
+
+  --chart-1: oklch(0.72 0.135 229);
+  --chart-2: oklch(0.72 0.095 178);
+  --chart-3: oklch(0.68 0.11 162);
+  --chart-4: oklch(0.78 0.12 72);
+  --chart-5: oklch(0.65 0.105 285);
+
+  --rail: oklch(0.93 0.032 224);
+  --rail-foreground: oklch(0.32 0.06 235);
+  --rail-muted: oklch(0.52 0.045 232);
+  --rail-hover: oklch(0.88 0.045 226);
+
+  --gradient-rail: linear-gradient(
+    185deg,
+    oklch(0.96 0.028 222) 0%,
+    oklch(0.93 0.032 224) 55%,
+    oklch(0.89 0.042 226) 100%
+  );
+  --gradient-brand: linear-gradient(
+    135deg,
+    oklch(0.74 0.13 222) 0%,
+    oklch(0.78 0.11 197) 100%
+  );
+  --gradient-surface: linear-gradient(
+    150deg,
+    oklch(1 0 0) 0%,
+    oklch(0.99 0.008 220) 100%
+  );
+
+  --shadow-card: 0 1px 2px oklch(0.35 0.05 250 / 0.04), 0 8px 24px oklch(0.35 0.05 250 / 0.05);
+  --shadow-float: 0 18px 44px oklch(0.35 0.05 250 / 0.1);
+  --shadow-inset-line: inset 0 1px 0 oklch(1 0 0 / 0.06);
+}
+
+.dark {
+  --background: oklch(0.19 0.036 252);
+  --foreground: oklch(0.96 0.01 220);
+  --card: oklch(0.242 0.04 252);
+  --card-foreground: oklch(0.96 0.01 220);
+  --popover: oklch(0.242 0.04 252);
+  --popover-foreground: oklch(0.96 0.01 220);
+  --primary: oklch(0.68 0.115 200);
+  --primary-foreground: oklch(0.19 0.036 252);
+  --primary-soft: oklch(0.32 0.06 220);
+  --secondary: oklch(0.3 0.045 252);
+  --secondary-foreground: oklch(0.96 0.01 220);
+  --muted: oklch(0.3 0.045 252);
+  --muted-foreground: oklch(0.74 0.028 232);
+  --accent: oklch(0.32 0.06 220);
+  --accent-foreground: oklch(0.94 0.02 210);
+  --success-soft: oklch(0.32 0.06 162);
+  --warning-soft: oklch(0.34 0.07 78);
+  --info-soft: oklch(0.32 0.06 245);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 14%);
+  --rail: oklch(0.222 0.045 252);
+}
+
+@layer base {
+  * {
+    border-color: var(--color-border);
+  }
+
+  body {
+    background-color: var(--color-background);
+    color: var(--color-foreground);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    font-family: var(--font-display);
+    letter-spacing: -0.02em;
+  }
+}
+
+@utility rail-surface {
+  background-image: var(--gradient-rail);
+}
+
+@utility rail-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in oklab, var(--rail-foreground) 26%, transparent) transparent;
+}
+
+.rail-scroll::-webkit-scrollbar {
+  width: 6px;
+}
+
+.rail-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.rail-scroll::-webkit-scrollbar-thumb {
+  background: color-mix(in oklab, var(--rail-foreground) 22%, transparent);
+  border-radius: 999px;
+}
+
+.rail-scroll::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in oklab, var(--rail-foreground) 38%, transparent);
+}
+
+@utility brand-surface {
+  background-image: var(--gradient-brand);
+}
+
+@utility panel {
+  background-image: var(--gradient-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-card);
+}
+
+@utility shadow-float {
+  box-shadow: var(--shadow-float);
+}
+
+@utility numeric {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
