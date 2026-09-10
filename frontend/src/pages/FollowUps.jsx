@@ -171,6 +171,7 @@ function InlineFollowUpInfo({ row, lead }) {
         ))}
       </dl>
       <div className="mt-4 grid gap-2 border-t border-border pt-3 text-sm sm:grid-cols-2">
+        <p><span className="font-semibold">Outcome:</span> {row.outcome}</p>
         <p><span className="font-semibold">Due:</span> {row.due}</p>
         <p><span className="font-semibold">Notes:</span> {row.note}</p>
       </div>

@@ -1,4 +1,5 @@
 const pool = require("../config/db");
+const { advanceLeadStage, setLeadLost, DEAL_TO_LEAD_STATUS } = require("../utils/leadStage");
 
 
 // Stage probability
@@ -12,6 +13,17 @@ const stageProbability = {
 };
 
 const allowedStages = Object.keys(stageProbability);
+
+const syncLeadStage = async (deal) => {
+    if (!deal?.lead_id) return;
+
+    if (deal.stage === "CLOSED_LOST") {
+        await setLeadLost(pool, deal.lead_id);
+        return;
+    }
+
+    await advanceLeadStage(pool, deal.lead_id, DEAL_TO_LEAD_STATUS[deal.stage]);
+};
 
 
 // CREATE DEAL
@@ -172,6 +184,8 @@ const createDeal = async (req, res) => {
                 expected_close_date || null
             ]
         );
+
+        await syncLeadStage(result.rows[0]);
 
         return res.status(201).json({
             success: true,
@@ -531,6 +545,8 @@ const updateDeal = async (req, res) => {
                 id
             ]
         );
+
+        await syncLeadStage(result.rows[0]);
 
         return res.status(200).json({
             success: true,

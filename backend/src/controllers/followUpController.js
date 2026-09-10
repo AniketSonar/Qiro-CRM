@@ -1,4 +1,5 @@
 const pool = require("../config/db");
+const { advanceLeadStage } = require("../utils/leadStage");
 
 
 // CREATE FOLLOW-UP
@@ -223,6 +224,7 @@ const getFollowUps = async (req, res) => {
                 f.*,
 
                 u.name AS assigned_user,
+                fo.name AS outcome_name,
 
                 l.first_name AS lead_first_name,
                 l.last_name AS lead_last_name,
@@ -240,6 +242,9 @@ const getFollowUps = async (req, res) => {
 
             LEFT JOIN contacts c
                 ON f.contact_id = c.id
+
+            LEFT JOIN follow_up_outcomes fo
+                ON f.outcome_id = fo.id
 
             ${whereClause}
 
@@ -434,9 +439,29 @@ const updateFollowUp = async (req, res) => {
 const completeFollowUp = async (req, res) => {
     try {
         const { id } = req.params;
-        const { outcome } = req.body || {};
+        const { outcome_id, outcome } = req.body || {};
+        let outcomeName = null;
 
-        if (!outcome || !outcome.trim()) {
+        if (outcome_id) {
+            const outcomeResult = await pool.query(
+                `SELECT name
+                 FROM follow_up_outcomes
+                 WHERE id = $1
+                 AND is_active = TRUE`,
+                [outcome_id]
+            );
+
+            if (outcomeResult.rows.length === 0) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Invalid or inactive outcome"
+                });
+            }
+
+            outcomeName = outcomeResult.rows[0].name;
+        }
+
+        if (!outcome_id && (!outcome || !outcome.trim())) {
             return res.status(400).json({
                 success: false,
                 message: "Outcome is required"
@@ -464,14 +489,16 @@ const completeFollowUp = async (req, res) => {
             `UPDATE follow_ups
              SET
                 status = 'COMPLETED',
-                outcome = $1,
+                outcome_id = $1,
+                outcome = $2,
                 completed_at = CURRENT_TIMESTAMP,
                 updated_at = CURRENT_TIMESTAMP
-             WHERE id = $2
+             WHERE id = $3
              AND status = 'PENDING'
              RETURNING *`,
             [
-                outcome.trim(),
+                outcome_id || null,
+                outcome?.trim() || outcomeName,
                 id
             ]
         );
@@ -489,6 +516,14 @@ const completeFollowUp = async (req, res) => {
                     : "Follow-up not found"
             });
         }
+
+            const completedFollowUp = result.rows[0];
+            const targetStatus = ["MEETING", "DEMO"].includes(
+                completedFollowUp.follow_up_type?.toUpperCase()
+            )
+                ? "QUALIFIED"
+                : "CONTACTED";
+            await advanceLeadStage(pool, completedFollowUp.lead_id, targetStatus);
 
         return res.status(200).json({
             success: true,

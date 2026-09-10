@@ -218,8 +218,9 @@ const mapFollowUps = (res) =>
         fullName(f.lead_first_name, f.lead_last_name) ||
         fullName(f.contact_first_name, f.contact_last_name) ||
         "—",
-      company: titleCase(f.outcome) || "—",
+      company: f.outcome_name || titleCase(f.outcome) || "—",
       channel: titleCase(f.follow_up_type) || "Task",
+      outcome: f.outcome_name || titleCase(f.outcome) || "—",
       due: dateTimeLabel(f.scheduled_at),
       status,
       owner: f.assigned_user || "Unassigned",
