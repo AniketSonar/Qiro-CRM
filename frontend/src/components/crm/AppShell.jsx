@@ -99,7 +99,7 @@ function Rail({ collapsed, onToggle, mobileOpen, onClose }) {
       )}
     >
       <div className="flex items-center gap-3 px-4 py-5">
-        <span className="grid size-9 shrink-0 place-items-center overflow-hidden rounded-xl bg-white">
+        <span className="grid size-9 shrink-0 place-items-center overflow-hidden rounded-xl">
           <img src="/qiro_logo.png" alt="QIRO" className="size-full object-contain" />
         </span>
         {!collapsed && <div className="min-w-0 flex-1">
@@ -140,7 +140,6 @@ function Rail({ collapsed, onToggle, mobileOpen, onClose }) {
       )}
       onClick={onClose}
     >
-                  {active && <span className="brand-surface absolute left-0 top-1/2 h-6 w-[3px] -translate-y-1/2 rounded-r-full" />}
                   <item.icon className="size-[18px] shrink-0" />
                   {!collapsed && <>
                       <span className="flex-1 truncate">{item.label}</span>
@@ -249,7 +248,6 @@ function AppShell({
     className="relative grid size-10 place-items-center rounded-xl border border-border bg-card text-muted-foreground transition-colors hover:text-foreground"
   >
                 <Bell className="size-4" />
-                <span className="absolute right-2.5 top-2.5 size-2 rounded-full bg-destructive ring-2 ring-card" />
               </Link>
               <Link to="/profile">
                 <Avatar initials={topInitials} className="size-10" />
