@@ -101,8 +101,198 @@ const inr = (n) =>
     .format(Number(n ?? 0))
     .replace("₹", "Rs. ");
 
-/** Builds a one-page quotation PDF from a live deal + lead record. */
-export function buildQuotationPdf({ deal, lead, meeting, preparedBy }) {
+const COMPANY = {
+  name: "QIRO TECH INNOVATION PVT. LTD.",
+  gst: "27AABCQ2268A1ZR",
+  address: ["Office No 602, 6th Floor", "The Business AdvantEdge", "Near Laxmi Chowk, Marunji Road", "Hinjawadi Phase I, Pune - 411057"],
+  email: "commercial@qirotec.com",
+  phone: "+91 8623823997",
+  bank: [
+    "Account name: QIRO TECH INNOVATION PRIVATE LIMITED",
+    "Bank: IDFC FIRST",
+    "Account number: 86690868447",
+    "IFSC: IDFB0043491",
+    "SWIFT: IDFBINBBMUM",
+    "Branch: CHHATRAPATI SAMBHAJINAGAR BRANCH"
+  ]
+};
+
+const teal = [21, 103, 123];
+const dark = [28, 36, 43];
+
+const referenceHeader = (doc, title) => {
+  const W = doc.internal.pageSize.getWidth();
+  doc.setTextColor(...teal);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(18);
+  doc.text("QIRO TECH", W / 2, 38, { align: "center" });
+  doc.setFontSize(10);
+  doc.text("Innovation Pvt. Ltd.", W / 2, 52, { align: "center" });
+  doc.setTextColor(...dark);
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(9);
+  doc.text(`Pune, Maharashtra | ${COMPANY.email} | ${COMPANY.phone}`, W / 2, 72, { align: "center" });
+  doc.setDrawColor(...dark);
+  doc.line(36, 86, W - 36, 86);
+  doc.setTextColor(...teal);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(18);
+  doc.text(title, W / 2, 120, { align: "center" });
+};
+
+const referenceFooter = (doc) => {
+  const W = doc.internal.pageSize.getWidth();
+  const H = doc.internal.pageSize.getHeight();
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(8);
+  doc.setTextColor(90, 90, 90);
+  doc.text(`${COMPANY.name} | GST: ${COMPANY.gst}`, W / 2, H - 28, { align: "center" });
+};
+
+const drawReferenceTable = (doc, columns, rows, startY, rowHeight = 34) => {
+  const W = doc.internal.pageSize.getWidth();
+  const x = 36;
+  const width = W - 72;
+  const total = columns.reduce((sum, column) => sum + column.width, 0);
+  let currentX = x;
+  doc.setFillColor(...teal);
+  doc.rect(x, startY, width, 34, "F");
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(9);
+  doc.setTextColor(255, 255, 255);
+  columns.forEach((column) => {
+    doc.text(column.label, currentX + column.width / 2, startY + 21, { align: "center" });
+    currentX += (column.width / total) * width;
+  });
+  let y = startY + 34;
+  rows.forEach((row) => {
+    currentX = x;
+    const values = columns.map((column) => doc.splitTextToSize(String(row[column.key] ?? ""), column.width - 10));
+    const height = Math.max(rowHeight, ...values.map((lines) => lines.length * 13 + 16));
+    doc.setDrawColor(110, 110, 110);
+    doc.setTextColor(...dark);
+    doc.setFont("helvetica", "normal");
+    values.forEach((lines, index) => {
+      const column = columns[index];
+      const columnWidth = (column.width / total) * width;
+      doc.rect(currentX, y, columnWidth, height);
+      lines.forEach((line, lineIndex) => doc.text(line, currentX + columnWidth / 2, y + 20 + lineIndex * 13, { align: "center" }));
+      currentX += columnWidth;
+    });
+    y += height;
+  });
+  return y;
+};
+
+const drawReferenceSow = (doc, title, overview, objectives, deliverables, inclusions) => {
+  referenceHeader(doc, title);
+  let y = 154;
+  const section = (heading, lines) => {
+    doc.setTextColor(...teal);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(13);
+    doc.text(heading, 42, y);
+    y += 20;
+    doc.setTextColor(...dark);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(10);
+    doc.splitTextToSize(lines, 510).forEach((line) => {
+      doc.text(line, 42, y);
+      y += 14;
+    });
+    y += 14;
+  };
+  section("Project Overview", overview);
+  section("Objectives", objectives.map((item) => `- ${item}`).join("\n"));
+  section("Deliverables", deliverables.map((item, index) => `${index + 1}. ${item}`).join("\n"));
+  section("Inclusions", inclusions.map((item) => `- ${item}`).join("\n"));
+  referenceFooter(doc);
+};
+
+function buildReferenceQuotationPdf({ deal, lead, template = "web" }) {
+  const doc = new jsPDF({ unit: "pt", format: "a4" });
+  const W = doc.internal.pageSize.getWidth();
+  const isDigital = template === "digital";
+  const clientName = [lead?.first_name, lead?.last_name].filter(Boolean).join(" ") || lead?.company || "Client Name";
+  const project = deal?.title || (isDigital ? "Digital Marketing" : "Web Development");
+  const amount = Number(deal?.amount ?? 0);
+  referenceHeader(doc, "QUOTATION");
+  doc.setTextColor(...dark);
+  doc.setFontSize(11);
+  doc.setFont("helvetica", "bold");
+  doc.text("Quotation for:", 42, 160);
+  doc.text(project, W - 42, 160, { align: "right" });
+  doc.setFont("helvetica", "normal");
+  doc.text(clientName, 42, 180);
+  doc.text(`Date: ${new Date().toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}`, W - 42, 180, { align: "right" });
+  doc.text(lead?.company || lead?.city || "Pune, Maharashtra", 42, 198);
+  doc.text(`Quotation #: Q-${new Date().getFullYear()}-${String(deal?.id ?? "0000").padStart(4, "0")}`, W - 42, 198, { align: "right" });
+  doc.setTextColor(...teal);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(13);
+  doc.text(`Subject: Quotation for ${isDigital ? "Digital Marketing" : "Web Development"}`, 42, 240);
+  doc.setTextColor(...dark);
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(10);
+  doc.text("Thank you for showing interest in our services. Please find our exclusive quotation for your requirement.", 42, 266);
+  const deliverables = isDigital ? "1) Static posts (12 per month)  2) Reels (4 per month)" : "1) Hosting  2) Domain  3) SSL Certificate  4) Corporate mail id";
+  drawReferenceTable(doc, [
+    { key: "number", label: "Sr. No.", width: 55 },
+    { key: "description", label: "Product Description", width: 130 },
+    { key: "technology", label: "Technology", width: 110 },
+    { key: "deliverables", label: "Deliverables", width: 230 },
+    { key: "price", label: "Price / Unit", width: 100 },
+    { key: "total", label: "Total Amount", width: 110 }
+  ], [{ number: 1, description: project, technology: isDigital ? "Adobe Tool, Canva" : "HTML, CSS, JS, Next JS", deliverables, price: `${inr(amount)} / month`, total: inr(amount) }], 300, 110);
+  doc.setFont("helvetica", "bold");
+  doc.setTextColor(...dark);
+  doc.text(`Sub Total: ${inr(amount)}`, W - 42, 470, { align: "right" });
+  doc.text(`Including 18% GST - Grand Total: ${inr(amount)}`, W - 42, 494, { align: "right" });
+  referenceFooter(doc);
+
+  doc.addPage();
+  drawReferenceSow(
+    doc,
+    isDigital ? "SCOPE OF WORK: DIGITAL MARKETING" : "SCOPE OF WORK",
+    isDigital ? "This scope covers the creation and management of social media content for Instagram and Facebook, with monthly delivery of 12 static posts and 4 reels." : "The project aims to design, develop and launch a professional, secure and user-friendly corporate website.",
+    isDigital ? ["Increase brand awareness through consistent posting", "Maintain a unified brand identity", "Provide monthly performance insights"] : ["Establish a credible online presence", "Ensure the website is secure and reliable", "Enable fast updates and annual maintenance support"],
+    isDigital ? ["12 static posts with captions, hashtags and CTAs", "4 reels of 15-30 seconds", "Monthly content calendar", "Monthly performance report"] : ["Website hosting setup", "SSL certificate installation", "Responsive industry-oriented design", "Annual maintenance and technical support", "Code handover after development"],
+    isDigital ? ["Content strategy and monthly theme planning", "Design and copywriting for all content", "One round of minor revisions", "Monthly performance review"] : ["Hosting setup for 1 year", "SSL certificate installation", "Website maintenance support", "WhatsApp update support"]
+  );
+  doc.addPage();
+  referenceHeader(doc, "FEATURES & TIMELINE");
+  drawReferenceTable(doc, [{ key: "phase", label: "Phase", width: 180 }, { key: "activity", label: "Key Activities", width: 220 }, { key: "timeline", label: "Timeline", width: 150 }], isDigital ? [
+    { phase: "Planning", activity: "Content themes and calendar", timeline: "Monthly" },
+    { phase: "Content", activity: "Posts, reels and copywriting", timeline: "Monthly" },
+    { phase: "Review", activity: "Analytics and optimization", timeline: "Monthly" }
+  ] : [
+    { phase: "Discovery & Planning", activity: "Requirement gathering", timeline: "Week 1" },
+    { phase: "Infrastructure Setup", activity: "Domain, hosting and SSL", timeline: "Week 1" },
+    { phase: "Website Development", activity: "Design and responsive build", timeline: "Week 2" },
+    { phase: "Testing & Go-Live", activity: "Functionality testing and deployment", timeline: "Week 2" },
+    { phase: "Maintenance", activity: "Support and updates", timeline: "Ongoing" }
+  ], 150, 38);
+  referenceFooter(doc);
+  doc.addPage();
+  referenceHeader(doc, "BANK DETAILS");
+  doc.setTextColor(...dark);
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(11);
+  COMPANY.bank.forEach((line, index) => doc.text(line, 54, 170 + index * 24));
+  doc.setFont("helvetica", "bold");
+  doc.setTextColor(...teal);
+  doc.text("Warm Regards,", 54, 360);
+  doc.text(COMPANY.name, 54, 386);
+  doc.setFont("helvetica", "normal");
+  COMPANY.address.forEach((line, index) => doc.text(line, 54, 420 + index * 18));
+  doc.text(`${COMPANY.email} | ${COMPANY.phone}`, 54, 500);
+  referenceFooter(doc);
+  return doc;
+}
+
+/** Builds a quotation PDF from a live deal + lead record. */
+export function buildQuotationPdf({ deal, lead, meeting, preparedBy, template = "web" }) {
+  if (template === "web" || template === "digital") return buildReferenceQuotationPdf({ deal, lead, template });
   const doc = new jsPDF({ unit: "pt", format: "a4" });
   const W = doc.internal.pageSize.getWidth();
   const M = 48;
@@ -237,7 +427,71 @@ export async function shareQuotationPdf(payload) {
 /* Tax Invoice PDF                                                     */
 /* ------------------------------------------------------------------ */
 
-export function buildInvoicePdf(sale, customerName = null) {
+function buildReferenceInvoicePdf(sale, customerName = null) {
+  const doc = new jsPDF({ unit: "pt", format: "a4" });
+  const W = doc.internal.pageSize.getWidth();
+  const raw = sale?.raw ?? sale ?? {};
+  const customer = customerName || sale?.customer || raw.customer_code || "Valued Customer";
+  const amount = Number(raw.sale_amount ?? sale?.amount ?? 0);
+  const tax = Number(raw.tax ?? 0);
+  const discount = Number(raw.discount ?? 0);
+  const total = Number(raw.final_amount ?? sale?.amount ?? amount - discount + tax);
+  const invoiceNumber = raw.invoice_number || sale?.id || `INV-${Date.now()}`;
+  const date = raw.sale_date || sale?.date || new Date().toISOString();
+  referenceHeader(doc, "TAX INVOICE");
+  doc.setTextColor(...dark);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(9);
+  doc.text("ORIGINAL FOR RECIPIENT", W - 42, 104, { align: "right" });
+  doc.text("Bill To:", 42, 154);
+  doc.text("Invoice details:", W / 2, 154);
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(9);
+  doc.text(String(customer), 42, 172);
+  doc.text(`Invoice date: ${new Date(date).toLocaleDateString("en-IN")}`, W / 2, 172);
+  doc.text(`Invoice no.: ${invoiceNumber}`, W / 2, 188);
+  doc.text("Place of supply: Maharashtra (27)", W / 2, 204);
+  const end = drawReferenceTable(doc, [
+    { key: "number", label: "S.N.", width: 45 },
+    { key: "description", label: "DESCRIPTION", width: 240 },
+    { key: "hsn", label: "HSN/SAC", width: 75 },
+    { key: "qty", label: "QTY", width: 55 },
+    { key: "rate", label: "RATE", width: 85 },
+    { key: "amount", label: "AMOUNT", width: 105 }
+  ], [{ number: 1, description: raw.product_service || "Website Development + Graphic Post", hsn: raw.hsn_sac || "", qty: 1, rate: inr(amount), amount: inr(amount) }], 238, 360);
+  let y = end + 20;
+  doc.setTextColor(...dark);
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(10);
+  doc.text("Taxable amount", W - 210, y);
+  doc.text(inr(amount - discount), W - 42, y, { align: "right" });
+  y += 18;
+  if (discount) {
+    doc.text("Discount", W - 210, y);
+    doc.text(`- ${inr(discount)}`, W - 42, y, { align: "right" });
+    y += 18;
+  }
+  doc.text("CGST @ 9% / SGST @ 9%", W - 210, y);
+  doc.text(inr(tax), W - 42, y, { align: "right" });
+  y += 24;
+  doc.setFont("helvetica", "bold");
+  doc.text("GRAND TOTAL", W - 210, y);
+  doc.text(inr(total), W - 42, y, { align: "right" });
+  y += 42;
+  doc.setFont("helvetica", "bold");
+  doc.setTextColor(...teal);
+  doc.text("BANK ACCOUNT DETAILS", 42, y);
+  doc.setTextColor(...dark);
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(8);
+  COMPANY.bank.forEach((line, index) => doc.text(line, 42, y + 18 + index * 13));
+  doc.setFont("helvetica", "bold");
+  doc.text(`Payment status: ${String(raw.payment_status ?? sale?.status ?? "PENDING").toUpperCase()}`, W - 210, y + 30);
+  referenceFooter(doc);
+  return doc;
+}
+
+function buildLegacyInvoicePdf(sale, customerName = null) {
   const doc = new jsPDF({ unit: "pt", format: "a4" });
   const W = doc.internal.pageSize.getWidth();
   const M = 48;
@@ -399,6 +653,10 @@ export function buildInvoicePdf(sale, customerName = null) {
   doc.text("3. This is a system-generated invoice generated through Qiro CRM.", M, y);
 
   return doc;
+}
+
+export function buildInvoicePdf(sale, customerName = null, template = "tax") {
+  return template === "tax" ? buildReferenceInvoicePdf(sale, customerName) : buildLegacyInvoicePdf(sale, customerName);
 }
 
 export function downloadInvoicePdf(sale, customerName = null) {
