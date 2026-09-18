@@ -421,7 +421,6 @@ function DocumentCard({ deal, lead, documentType, onEdit, onStage }) {
   const [files, setFiles] = useState(() => listAttachments(deal.id, documentType));
   const [error, setError] = useState(null);
   const [busy, setBusy] = useState(false);
-  const [quotationTemplate, setQuotationTemplate] = useState("web");
   const isQuotation = documentType === "quotation";
   const title = isQuotation ? "Quotation" : "Invoice";
   const preparedBy = { name: deal.assigned_user || "Sales Representative" };
@@ -440,7 +439,7 @@ function DocumentCard({ deal, lead, documentType, onEdit, onStage }) {
 
   const generateAndDownload = () => {
     if (isQuotation) {
-      shareQuotationPdf({ deal, lead, preparedBy, template: quotationTemplate });
+      shareQuotationPdf({ deal, lead, preparedBy });
     } else {
       downloadInvoicePdf(deal, lead?.company || lead?.first_name);
     }
@@ -453,7 +452,7 @@ function DocumentCard({ deal, lead, documentType, onEdit, onStage }) {
       if (files[0]) {
         await shareAttachment(files[0], title);
       } else if (isQuotation) {
-        await shareQuotationPdf({ deal, lead, preparedBy, template: quotationTemplate });
+        await shareQuotationPdf({ deal, lead, preparedBy });
       } else {
         await shareInvoicePdf(deal, lead?.company || lead?.first_name);
       }
@@ -501,17 +500,6 @@ function DocumentCard({ deal, lead, documentType, onEdit, onStage }) {
       </div>
 
       <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-border pt-4">
-        {isQuotation ? (
-          <Select
-            aria-label="Quotation template"
-            className="h-10 w-[190px] text-sm font-semibold"
-            value={quotationTemplate}
-            onChange={(event) => setQuotationTemplate(event.target.value)}
-          >
-            <option value="web">Web development quotation</option>
-            <option value="digital">Digital marketing quotation</option>
-          </Select>
-        ) : null}
         <button
           type="button"
           onClick={generateAndDownload}
