@@ -288,6 +288,8 @@ export const useUsers = () => useApi("/users?limit=100", mapUsers, demo.users);
 export const useSales = () => useApi("/sales?limit=100", mapSales, demo.salesRows);
 export const useNotifications = () =>
   useApi("/notifications", mapNotifications, demo.notifications);
+export const useSalaries = () => useApi("/salaries", (res) => res?.data ?? [], []);
+export const useMySalary = () => useApi("/salaries/my", (res) => res?.data ?? null, null);
 
 /* ---------- derived views ---------- */
 
@@ -602,6 +604,9 @@ export const crud = {
     setStatus: (id, status) => run(api.patch(`/users/${id}/status`, { status })),
     setRole: (id, role) => run(api.patch(`/users/${id}/role`, { role })),
     remove: (id) => run(api.del(`/users/${id}`))
+  },
+  salaries: {
+    update: (userId, body) => run(api.put(`/salaries/${userId}`, body))
   },
   notifications: {
     markRead: (id) => run(api.put(`/notifications/${id}/read`)),

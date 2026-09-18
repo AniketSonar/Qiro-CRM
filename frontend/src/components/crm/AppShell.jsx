@@ -15,6 +15,7 @@ import {
   CircleDollarSign,
   BarChart3,
   ShieldCheck,
+  Award,
   Bell,
   Search,
   Plus,
@@ -50,6 +51,7 @@ const navGroups = [
       { to: "/contacts", label: "Contacts", icon: Users2 },
       { to: "/activities", label: "Activities", icon: CalendarCheck2 },
       { to: "/sales", label: "Sales", icon: CircleDollarSign },
+      { to: "/compensation", label: "Compensation & Targets", icon: Award },
       { to: "/reports", label: "Reports", icon: BarChart3 }
     ]
   },

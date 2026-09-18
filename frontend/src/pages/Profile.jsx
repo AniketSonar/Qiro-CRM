@@ -1,10 +1,11 @@
-import { Mail, Phone, MapPin, LogOut } from "lucide-react";
+import { Mail, Phone, MapPin, LogOut, Award } from "lucide-react";
+import { Link } from "react-router-dom";
 import { AppShell, GhostButton } from "../components/crm/AppShell";
 import { Avatar, Chip, Panel, StatCard } from "../components/crm/ui-bits";
 import { currency } from "../lib/crm-data";
 import { useAuth } from "../lib/auth";
 import { useNavigate } from "react-router-dom";
-import { titleCase } from "../lib/crm-store";
+import { titleCase, useMySalary } from "../lib/crm-store";
 const buildFields = (user, roleLabel) => [
   { label: "Full name", value: user?.name ?? "\u2014" },
   { label: "Role", value: roleLabel },
@@ -18,6 +19,44 @@ const buildFields = (user, roleLabel) => [
       : "\u2014"
   }
 ];
+function CompensationSnapshot() {
+  const { data: p, loading } = useMySalary();
+  if (loading) return <div className="grid gap-4 sm:grid-cols-3"><StatCard label="Loading…" value="—" /></div>;
+  if (!p) return (
+    <div className="grid gap-4 sm:grid-cols-3">
+      <StatCard label="Net Base Salary" value="—" hint="Not configured yet" />
+      <StatCard label="Target" value="—" />
+      <StatCard label="Bonus" value="—" />
+    </div>
+  );
+  const comp = p.target?.completionRate || 0;
+  return (
+    <div className="space-y-4">
+      <div className="grid gap-4 sm:grid-cols-3">
+        <StatCard label="Net Base Salary" value={currency(p.salary?.netBaseSalary || 0)} hint="Basic + Allowances − Deductions" />
+        <StatCard
+          label="Target Progress"
+          value={`${comp}%`}
+          delta={currency(p.target?.achievedSales || 0)}
+          trend={comp >= 100 ? "up" : "down"}
+          hint={`of ${currency(p.target?.targetAmount || 0)} target`}
+        />
+        <StatCard
+          label="Projected Payout"
+          value={currency(p.totalProjectedPayout || 0)}
+          delta={p.target?.earnedBonus > 0 ? `+${currency(p.target.earnedBonus)} bonus` : "Base only"}
+          trend="up"
+        />
+      </div>
+      <Link
+        to="/compensation"
+        className="inline-flex items-center gap-2 text-xs font-semibold text-primary hover:underline"
+      >
+        <Award className="size-3.5" /> View full Compensation & Target details →
+      </Link>
+    </div>
+  );
+}
 export default function Profile() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
@@ -72,11 +111,7 @@ export default function Profile() {
         </Panel>
 
         <div className="space-y-6">
-          <div className="grid gap-4 sm:grid-cols-3">
-            <StatCard label="Closed this quarter" value={currency(182e4)} delta="+11%" trend="up" />
-            <StatCard label="Target attainment" value="83%" hint={`of ${currency(22e5)}`} />
-            <StatCard label="Win rate" value="46%" delta="+4pt" trend="up" />
-          </div>
+          <CompensationSnapshot />
 
           <Panel title="Account details" description="Managed by your administrator">
             <dl className="grid gap-x-8 gap-y-4 sm:grid-cols-2">

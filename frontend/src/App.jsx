@@ -15,25 +15,27 @@ import Users from "./pages/Users";
 import Notifications from "./pages/Notifications";
 import Profile from "./pages/Profile";
 import Agenda from "./pages/Agenda";
+import Compensation from "./pages/Compensation";
 import Login from "./pages/Login";
 import { AuthProvider, RequireAuth, RequireAdmin } from "./lib/auth";
 
 const TITLES = {
-  "/": "Qiro CRM \u2014 Sales Pipeline Dashboard",
-  "/leads": "Leads \u2014 Qiro CRM",
-  "/pipeline": "Pipeline board \u2014 Qiro CRM",
-  "/follow-ups": "Follow-ups \u2014 Qiro CRM",
-  "/deals": "Deals \u2014 Qiro CRM",
-  "/customers": "Customers \u2014 Qiro CRM",
-  "/contacts": "Contacts \u2014 Qiro CRM",
-  "/activities": "Activity log \u2014 Qiro CRM",
-  "/sales": "Sales & invoices \u2014 Qiro CRM",
-  "/reports": "Reports \u2014 Qiro CRM",
-  "/users": "Users & roles \u2014 Qiro CRM",
-  "/notifications": "Notifications \u2014 Qiro CRM",
-  "/profile": "My profile \u2014 Qiro CRM",
-  "/agenda": "Agenda \u2014 Qiro CRM",
-  "/login": "Sign in \u2014 Qiro CRM"
+  "/": "Qiro CRM — Sales Pipeline Dashboard",
+  "/leads": "Leads — Qiro CRM",
+  "/pipeline": "Pipeline board — Qiro CRM",
+  "/follow-ups": "Follow-ups — Qiro CRM",
+  "/deals": "Deals — Qiro CRM",
+  "/customers": "Customers — Qiro CRM",
+  "/contacts": "Contacts — Qiro CRM",
+  "/activities": "Activity log — Qiro CRM",
+  "/sales": "Sales & invoices — Qiro CRM",
+  "/compensation": "Compensation & Targets — Qiro CRM",
+  "/reports": "Reports — Qiro CRM",
+  "/users": "Users & roles — Qiro CRM",
+  "/notifications": "Notifications — Qiro CRM",
+  "/profile": "My profile — Qiro CRM",
+  "/agenda": "Agenda — Qiro CRM",
+  "/login": "Sign in — Qiro CRM"
 };
 
 function TitleSync() {
@@ -60,6 +62,7 @@ export default function App() {
         <Route path="/contacts" element={<RequireAuth><Contacts /></RequireAuth>} />
         <Route path="/activities" element={<RequireAuth><Activities /></RequireAuth>} />
         <Route path="/sales" element={<RequireAuth><Sales /></RequireAuth>} />
+        <Route path="/compensation" element={<RequireAuth><Compensation /></RequireAuth>} />
         <Route path="/reports" element={<RequireAuth><Reports /></RequireAuth>} />
         <Route path="/users" element={<RequireAuth><RequireAdmin><Users /></RequireAdmin></RequireAuth>} />
         <Route path="/notifications" element={<RequireAuth><Notifications /></RequireAuth>} />

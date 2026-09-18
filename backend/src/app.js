@@ -18,6 +18,7 @@ const salesRoutes = require("./routes/salesRoutes");
 const notificationRoutes = require("./routes/notificationRoutes");
 const reportRoutes = require("./routes/reportRoutes");
 const metaRoutes = require("./routes/metaRoutes");
+const salaryRoutes = require("./routes/salaryRoutes");
 
 
 const app = express();
@@ -71,6 +72,7 @@ app.use("/api/sales", salesRoutes);
 app.use("/api/notifications", notificationRoutes);
 app.use("/api/reports", reportRoutes);
 app.use("/api/webhooks", metaRoutes);
+app.use("/api/salaries", salaryRoutes);
 
 
 const PORT = process.env.PORT || 5000;
