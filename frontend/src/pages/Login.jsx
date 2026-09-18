@@ -40,7 +40,7 @@ export default function Login() {
             </div>
 
             <div className="relative z-10 max-w-[470px] pb-6 text-white">
-              <h2 className="font-display text-[clamp(2.9rem,4.4vw,5.2rem)] font-black leading-[1] tracking-[-0.06em] text-white">
+              <h2 className="font-display text-[clamp(2.9rem,3vw,5.2rem)] font-black leading-[1] tracking-[-0.06em] text-white">
                 Every lead followed up. Every deal accounted for.
               </h2>
 

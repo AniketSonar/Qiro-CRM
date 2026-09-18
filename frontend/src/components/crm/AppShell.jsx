@@ -17,6 +17,7 @@ import {
   ShieldCheck,
   Award,
   Bell,
+  CalendarDays,
   Search,
   Plus,
   Menu,
@@ -59,7 +60,8 @@ const navGroups = [
     label: "Administration",
     items: [
       { to: "/users", label: "Users & roles", icon: ShieldCheck, adminOnly: true },
-      { to: "/notifications", label: "Notifications", icon: Bell, badgeKey: "notifications" }
+      { to: "/notifications", label: "Notifications", icon: Bell, badgeKey: "notifications" },
+      { to: "/calendar", label: "Calendar", icon: CalendarDays }
     ]
   }
 ];
@@ -167,7 +169,7 @@ function Rail({ collapsed, onToggle, mobileOpen, onClose }) {
               <p className="truncate text-sm font-semibold">{user?.name ?? "Signed out"}</p>
               <p className="truncate text-[11px] text-rail-muted">{titleCase(user?.role) || "\u2014"}</p>
             </div>}
-          {!collapsed && <LogOut className="size-4 text-rail-muted" />}
+
         </Link>
       </div>
     </aside>

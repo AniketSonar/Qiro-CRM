@@ -3,6 +3,7 @@ const cors = require("cors");
 require("dotenv").config();
 
 const pool = require("./config/db");
+const { initSalarySchema } = require("./config/db");
 const authRoutes = require("./routes/authRoutes");
 const userRoutes = require("./routes/userRoutes");
 const dashboardRoutes = require("./routes/dashboardRoutes");
@@ -19,6 +20,7 @@ const notificationRoutes = require("./routes/notificationRoutes");
 const reportRoutes = require("./routes/reportRoutes");
 const metaRoutes = require("./routes/metaRoutes");
 const salaryRoutes = require("./routes/salaryRoutes");
+const calendarRoutes = require("./routes/calendarRoutes");
 
 
 const app = express();
@@ -73,10 +75,18 @@ app.use("/api/notifications", notificationRoutes);
 app.use("/api/reports", reportRoutes);
 app.use("/api/webhooks", metaRoutes);
 app.use("/api/salaries", salaryRoutes);
+app.use("/api/calendar", calendarRoutes);
 
 
 const PORT = process.env.PORT || 5000;
 
-app.listen(PORT, () => {
-    console.log(`CRM Backend running on port ${PORT}`);
-});
+initSalarySchema()
+    .then(() => {
+        app.listen(PORT, () => {
+            console.log(`CRM Backend running on port ${PORT}`);
+        });
+    })
+    .catch((error) => {
+        console.error("Salary schema initialization failed:", error);
+        process.exit(1);
+    });

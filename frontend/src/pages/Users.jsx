@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import { Plus, ShieldCheck } from "lucide-react";
 import { AppShell, GhostButton, TableShell, Td, Th } from "../components/crm/AppShell";
 import { Avatar, Chip, Panel, initialsOf, statusTone } from "../components/crm/ui-bits";
@@ -126,7 +127,9 @@ export default function Users() {
                   <Td>
                     <div className="flex items-center gap-3">
                       <Avatar initials={initialsOf(u.name)} />
-                      <span className="font-semibold">{u.name}</span>
+                      <Link to={`/users/${u.id}`} className="font-semibold hover:text-primary hover:underline">
+                        {u.name}
+                      </Link>
                     </div>
                   </Td>
                   <Td className="text-muted-foreground">{u.email}</Td>
@@ -167,20 +170,6 @@ export default function Users() {
           )}
         </tbody>
       </TableShell>
-
-      <Panel title="Role permissions" description="What each role can reach">
-        <ul className="divide-y divide-border">
-          {permissions.map((p) => (
-            <li key={p.role} className="flex items-center gap-3 py-3 first:pt-0 last:pb-0">
-              <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-accent text-accent-foreground">
-                <ShieldCheck className="size-4" />
-              </span>
-              <span className="w-36 shrink-0 text-sm font-bold">{p.role}</span>
-              <span className="text-sm text-muted-foreground">{p.scope}</span>
-            </li>
-          ))}
-        </ul>
-      </Panel>
 
       <UserForm
         open={Boolean(form)}

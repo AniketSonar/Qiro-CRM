@@ -12,6 +12,9 @@ import Activities from "./pages/Activities";
 import Sales from "./pages/Sales";
 import Reports from "./pages/Reports";
 import Users from "./pages/Users";
+import SalaryManagement from "./pages/SalaryManagement";
+import LeaveManagement from "./pages/LeaveManagement";
+import Calendar from "./pages/Calendar";
 import Notifications from "./pages/Notifications";
 import Profile from "./pages/Profile";
 import Agenda from "./pages/Agenda";
@@ -33,6 +36,7 @@ const TITLES = {
   "/reports": "Reports — Qiro CRM",
   "/users": "Users & roles — Qiro CRM",
   "/notifications": "Notifications — Qiro CRM",
+  "/calendar": "Calendar — Qiro CRM",
   "/profile": "My profile — Qiro CRM",
   "/agenda": "Agenda — Qiro CRM",
   "/login": "Sign in — Qiro CRM"
@@ -65,6 +69,9 @@ export default function App() {
         <Route path="/compensation" element={<RequireAuth><Compensation /></RequireAuth>} />
         <Route path="/reports" element={<RequireAuth><Reports /></RequireAuth>} />
         <Route path="/users" element={<RequireAuth><RequireAdmin><Users /></RequireAdmin></RequireAuth>} />
+        <Route path="/users/:id" element={<RequireAuth><RequireAdmin><SalaryManagement /></RequireAdmin></RequireAuth>} />
+        <Route path="/leave" element={<RequireAuth><LeaveManagement /></RequireAuth>} />
+        <Route path="/calendar" element={<RequireAuth><Calendar /></RequireAuth>} />
         <Route path="/notifications" element={<RequireAuth><Notifications /></RequireAuth>} />
         <Route path="/profile" element={<RequireAuth><Profile /></RequireAuth>} />
         <Route path="/agenda" element={<RequireAuth><Agenda /></RequireAuth>} />

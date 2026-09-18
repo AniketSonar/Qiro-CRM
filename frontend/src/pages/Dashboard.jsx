@@ -1,4 +1,6 @@
 import { Link } from "react-router-dom";
+import { useEffect, useMemo, useState } from "react";
+import { api } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import {
   Area,
@@ -36,6 +38,73 @@ export default function Dashboard() {
   const { kpis, leads, followUps, revenueTrend, sourceSplit, stageFunnel } = useDashboard();
   const { data: activities } = useActivities();
   const { agenda } = useAgenda();
+  const isSalesPerson = String(user?.role ?? "").toUpperCase() === "SALES_PERSON";
+  const [salaryState, setSalaryState] = useState(null);
+  const [salaryLoading, setSalaryLoading] = useState(false);
+
+  useEffect(() => {
+    if (!isSalesPerson || !user?.id) {
+      setSalaryState(null);
+      return undefined;
+    }
+
+    let alive = true;
+    setSalaryLoading(true);
+
+    api
+      .get(`/salaries/${user.id}`)
+      .then((response) => {
+        if (!alive) return;
+        const data = response?.data ?? {};
+        const profile = data.profile ?? {};
+        const targetAmount = Number(data.targetAmount ?? profile.target_amount ?? 0);
+        const achievedSales = Number(data.achievedSales ?? 0);
+        const targetBonus = Number(data.targetBonus ?? 0);
+        const salaryBase = Number(profile.basic_salary ?? 0) + Number(profile.allowances ?? 0) + Number(profile.bonus ?? 0) + Number(profile.incentive ?? 0) + targetBonus - Number(profile.deductions ?? 0);
+        setSalaryState({
+          targetAmount,
+          achievedSales,
+          targetBonus,
+          netSalary: Math.max(0, salaryBase)
+        });
+      })
+      .catch(() => {
+        if (!alive) return;
+        setSalaryState(null);
+      })
+      .finally(() => {
+        if (alive) setSalaryLoading(false);
+      });
+
+    return () => {
+      alive = false;
+    };
+  }, [isSalesPerson, user?.id]);
+
+  const salesKpis = useMemo(() => {
+    if (!isSalesPerson || !salaryState) return [];
+    const targetAmount = salaryState.targetAmount || 0;
+    const achievedSales = salaryState.achievedSales || 0;
+    const targetProgress = targetAmount > 0 ? Math.min(100, Math.round((achievedSales / targetAmount) * 100)) : 0;
+
+    return [
+      {
+        label: "Monthly target",
+        value: currency(targetAmount),
+        delta: targetAmount > 0 && achievedSales >= targetAmount ? "Reached" : `${currency(Math.max(0, targetAmount - achievedSales))} left`,
+        trend: achievedSales >= targetAmount ? "up" : "down",
+        hint: `${currency(achievedSales)} closed`
+      },
+      {
+        label: "Current salary",
+        value: currency(salaryState.netSalary),
+        delta: salaryState.targetBonus > 0 ? `+${currency(salaryState.targetBonus)} bonus` : "No target bonus",
+        trend: "up",
+        hint: `${targetProgress}% target progress`
+      }
+    ];
+  }, [isSalesPerson, salaryState]);
+
   const maxSource = Math.max(...sourceSplit.map((s) => s.value));
   const topStageCount = stageFunnel[0]?.count ?? 1;
   return <AppShell
@@ -51,8 +120,15 @@ export default function Dashboard() {
         </>}
   >
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        {salesKpis.length > 0 && salesKpis.map((k) => <StatCard key={k.label} {...k} />)}
         {kpis.map((k) => <StatCard key={k.label} {...k} />)}
       </div>
+
+      {isSalesPerson && salaryLoading && (
+        <div className="mt-3 rounded-xl border border-dashed border-border bg-muted/30 px-4 py-3 text-xs text-muted-foreground">
+          Loading target and salary details…
+        </div>
+      )}
 
       <div className="grid gap-6 xl:grid-cols-[1.6fr_1fr]">
         <Panel

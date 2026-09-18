@@ -219,6 +219,24 @@
   background-image: var(--gradient-brand);
 }
 
+button.brand-surface:not(:disabled),
+a.brand-surface {
+  transition: transform 180ms ease, box-shadow 180ms ease, filter 180ms ease;
+}
+
+button.brand-surface:not(:disabled):hover,
+a.brand-surface:hover {
+  transform: translateY(-2px);
+  filter: brightness(1.06);
+  box-shadow: var(--shadow-float);
+}
+
+button.brand-surface:not(:disabled):active,
+a.brand-surface:active {
+  transform: translateY(0);
+  filter: brightness(0.98);
+}
+
 @utility panel {
   background-image: var(--gradient-surface);
   border: 1px solid var(--color-border);

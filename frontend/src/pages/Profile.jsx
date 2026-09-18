@@ -1,10 +1,9 @@
 import { Mail, Phone, MapPin, LogOut, Award } from "lucide-react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { AppShell, GhostButton } from "../components/crm/AppShell";
 import { Avatar, Chip, Panel, StatCard } from "../components/crm/ui-bits";
 import { currency } from "../lib/crm-data";
 import { useAuth } from "../lib/auth";
-import { useNavigate } from "react-router-dom";
 import { titleCase, useMySalary } from "../lib/crm-store";
 const buildFields = (user, roleLabel) => [
   { label: "Full name", value: user?.name ?? "\u2014" },
@@ -81,7 +80,7 @@ export default function Profile() {
     title="My profile"
     subtitle="Your details, targets and preferences"
     actions={<>
-          <GhostButton>Change password</GhostButton>
+          {String(user?.role ?? "").toUpperCase() === "SALES_PERSON" ? <Link to="/calendar?request=1"><GhostButton>Leave requests</GhostButton></Link> : null}
           <GhostButton onClick={signOut}>
             <LogOut className="size-4" /> Sign out
           </GhostButton>
@@ -104,7 +103,7 @@ export default function Profile() {
                 <Phone className="size-3.5" /> +91 98200 40021
               </p>
               <p className="flex items-center gap-2">
-                <MapPin className="size-3.5" /> Mumbai, Maharashtra
+                <MapPin className="size-3.5" /> Maharashtra
               </p>
             </div>
           </div>
