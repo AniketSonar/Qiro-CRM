@@ -1,4 +1,5 @@
 const pool = require("../config/db");
+const { computeGstBreakdown, round2 } = require("../utils/gst");
 
 
 // Generate invoice number
@@ -7,6 +8,50 @@ const generateInvoiceNumber = () => {
 
     return `INV-${timestamp}`;
 };
+
+const PAYMENT_STATUSES = ["UNPAID", "PARTIAL", "PAID", "REFUNDED"];
+
+function resolvePayment(total, requestedStatus, requestedAmount) {
+    const invoiceTotal = Math.max(0, Number(total) || 0);
+    const normalizedStatus = String(requestedStatus || "UNPAID").toUpperCase();
+    const status = normalizedStatus === "PENDING"
+        ? "UNPAID"
+        : normalizedStatus === "CANCELLED"
+            ? "REFUNDED"
+            : normalizedStatus;
+
+    if (!PAYMENT_STATUSES.includes(status)) {
+        throw new Error("Invalid payment status");
+    }
+
+    let amountPaid = requestedAmount === undefined
+        ? 0
+        : Number(requestedAmount);
+
+    if (!Number.isFinite(amountPaid) || amountPaid < 0) {
+        throw new Error("Amount paid cannot be negative");
+    }
+
+    if (status === "PAID") amountPaid = invoiceTotal;
+    if (status === "UNPAID") amountPaid = 0;
+    if (amountPaid > invoiceTotal) {
+        throw new Error("Amount paid cannot exceed the invoice total");
+    }
+
+    const effectiveStatus = status === "REFUNDED"
+        ? status
+        : amountPaid >= invoiceTotal && invoiceTotal > 0
+            ? "PAID"
+            : amountPaid > 0
+                ? "PARTIAL"
+                : "UNPAID";
+
+    return {
+        paymentStatus: effectiveStatus,
+        amountPaid: round2(amountPaid),
+        balanceDue: round2(Math.max(invoiceTotal - amountPaid, 0))
+    };
+}
 
 
 // CREATE SALE
@@ -24,7 +69,10 @@ const createSale = async (req, res) => {
             sale_amount,
             discount = 0,
             tax = 0,
-            payment_status = "PENDING",
+            gst_mode,
+            gst_rate = 18,
+            payment_status = "UNPAID",
+            amount_paid = 0,
             payment_method,
             sale_date,
             notes
@@ -62,10 +110,35 @@ const createSale = async (req, res) => {
             });
         }
 
-        const finalAmount =
-            Number(sale_amount) -
-            Number(discount) +
-            Number(tax);
+        // GST-mode aware calculation. When gst_mode is supplied (No GST /
+        // Exclusive / Inclusive) we derive tax + CGST/SGST split from the
+        // sale amount; otherwise we fall back to the legacy manual "tax"
+        // field so older API calls keep working unchanged.
+        let finalGstMode = gst_mode || "EXCLUSIVE";
+        let finalGstRate = Number(gst_rate) >= 0 ? Number(gst_rate) : 18;
+        let finalTax = Number(tax) || 0;
+        let cgstAmount = round2(finalTax / 2);
+        let sgstAmount = round2(finalTax / 2);
+        let finalAmount;
+
+        if (gst_mode !== undefined) {
+            const breakdown = computeGstBreakdown(
+                Number(sale_amount) || 0,
+                Number(discount) || 0,
+                finalGstMode,
+                finalGstRate
+            );
+            finalGstMode = breakdown.gst_mode;
+            finalTax = breakdown.tax_amount;
+            cgstAmount = breakdown.cgst_amount;
+            sgstAmount = breakdown.sgst_amount;
+            finalAmount = breakdown.grand_total;
+        } else {
+            finalAmount =
+                Number(sale_amount) -
+                Number(discount) +
+                finalTax;
+        }
 
         if (finalAmount < 0) {
             return res.status(400).json({
@@ -202,28 +275,12 @@ const createSale = async (req, res) => {
 
 
         // Validate payment status
-        const validPaymentStatuses = [
-            "PENDING",
-            "PARTIAL",
-            "PAID",
-            "REFUNDED"
-        ];
-
-        const finalPaymentStatus =
-            payment_status.toUpperCase();
-
-        if (
-            !validPaymentStatuses.includes(
-                finalPaymentStatus
-            )
-        ) {
-
+        let payment;
+        try {
+            payment = resolvePayment(finalAmount, payment_status, amount_paid);
+        } catch (error) {
             await client.query("ROLLBACK");
-
-            return res.status(400).json({
-                success: false,
-                message: "Invalid payment status"
-            });
+            return res.status(400).json({ success: false, message: error.message });
         }
 
 
@@ -277,13 +334,19 @@ const createSale = async (req, res) => {
                 tax,
                 final_amount,
                 payment_status,
+                amount_paid,
+                balance_due,
                 payment_method,
                 sale_date,
-                notes
+                notes,
+                gst_mode,
+                gst_rate,
+                cgst_amount,
+                sgst_amount
             )
             VALUES (
                 $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,
-                $11,$12,$13,$14
+                $11,$12,$13,$14,$15,$16,$17,$18,$19,$20
             )
             RETURNING *
             `,
@@ -296,12 +359,18 @@ const createSale = async (req, res) => {
                 description?.trim() || null,
                 sale_amount,
                 discount,
-                tax,
+                finalTax,
                 finalAmount,
-                finalPaymentStatus,
+                payment.paymentStatus,
+                payment.amountPaid,
+                payment.balanceDue,
                 finalPaymentMethod,
                 sale_date || new Date(),
-                notes?.trim() || null
+                notes?.trim() || null,
+                finalGstMode,
+                finalGstRate,
+                cgstAmount,
+                sgstAmount
             ]
         );
 
@@ -347,6 +416,7 @@ const getSales = async (req, res) => {
             assigned_to,
             customer_id,
             deal_id,
+            lead_id,
             page = 1,
             limit = 10
         } = req.query;
@@ -424,6 +494,13 @@ const getSales = async (req, res) => {
             );
         }
 
+        if (lead_id) {
+            values.push(lead_id);
+            conditions.push(
+                `s.customer_id IN (SELECT id FROM customers WHERE lead_id = $${values.length})`
+            );
+        }
+
 
         const whereClause =
             conditions.length > 0
@@ -474,6 +551,9 @@ const getSales = async (req, res) => {
                     d.title AS deal_title,
                     d.amount AS deal_amount,
 
+                    q.quotation_type AS quotation_type,
+                    q.subject AS quotation_subject,
+
                     l.first_name AS lead_first_name,
                     l.last_name  AS lead_last_name,
                     l.company    AS lead_company,
@@ -490,6 +570,9 @@ const getSales = async (req, res) => {
 
                 LEFT JOIN deals d
                     ON s.deal_id = d.id
+
+                LEFT JOIN quotations q
+                    ON s.quotation_id = q.id
 
                 LEFT JOIN leads l
                     ON c.lead_id = l.id
@@ -549,6 +632,56 @@ const getSales = async (req, res) => {
 };
 
 
+// DELETE SALE (INVOICE)
+const deleteSale = async (req, res) => {
+    const client = await pool.connect();
+
+    try {
+        const { id } = req.params;
+
+        await client.query("BEGIN");
+
+        const saleResult = await client.query(
+            `SELECT id, assigned_to, quotation_id FROM sales WHERE id = $1 FOR UPDATE`,
+            [id]
+        );
+
+        if (saleResult.rows.length === 0) {
+            await client.query("ROLLBACK");
+            return res.status(404).json({ success: false, message: "Invoice not found" });
+        }
+
+        const sale = saleResult.rows[0];
+        if (req.user.role === "SALES_PERSON" && Number(sale.assigned_to) !== Number(req.user.id)) {
+            await client.query("ROLLBACK");
+            return res.status(403).json({ success: false, message: "You can only delete your assigned invoices" });
+        }
+
+        if (sale.quotation_id) {
+            await client.query(
+                `UPDATE quotations
+                 SET status = 'DRAFT', is_invoice = false, invoice_number = NULL,
+                     invoice_date = NULL, accepted_at = NULL, converted_sale_id = NULL,
+                     updated_at = NOW()
+                 WHERE id = $1 AND converted_sale_id = $2`,
+                [sale.quotation_id, sale.id]
+            );
+        }
+
+        await client.query(`DELETE FROM sales WHERE id = $1`, [id]);
+        await client.query("COMMIT");
+
+        return res.status(200).json({ success: true, message: "Invoice deleted" });
+    } catch (error) {
+        await client.query("ROLLBACK");
+        console.error("deleteSale error:", error);
+        return res.status(500).json({ success: false, message: error.message || "Internal server error" });
+    } finally {
+        client.release();
+    }
+};
+
+
 // GET SALE BY ID
 const getSaleById = async (req, res) => {
 
@@ -572,6 +705,9 @@ const getSaleById = async (req, res) => {
                 d.title AS deal_title,
                 d.amount AS deal_amount,
 
+                q.quotation_type AS quotation_type,
+                q.subject AS quotation_subject,
+
                 l.first_name AS lead_first_name,
                 l.last_name  AS lead_last_name,
                 l.company    AS lead_company,
@@ -588,6 +724,9 @@ const getSaleById = async (req, res) => {
 
             LEFT JOIN deals d
                 ON s.deal_id = d.id
+
+            LEFT JOIN quotations q
+                ON s.quotation_id = q.id
 
             LEFT JOIN leads l
                 ON c.lead_id = l.id
@@ -663,10 +802,13 @@ const updateSale = async (req, res) => {
 
         const {
             payment_status,
+            amount_paid,
             payment_method,
             notes,
             discount,
-            tax
+            tax,
+            gst_mode,
+            gst_rate
         } = req.body || {};
 
 
@@ -717,29 +859,45 @@ const updateSale = async (req, res) => {
                 : Number(sale.discount);
 
 
-        const newTax =
+        let newTax =
             tax !== undefined
                 ? Number(tax)
                 : Number(sale.tax);
 
+        let newGstMode = gst_mode !== undefined ? gst_mode : sale.gst_mode;
+        let newGstRate = gst_rate !== undefined ? Number(gst_rate) : Number(sale.gst_rate ?? 18);
+        let newCgstAmount = Number(sale.cgst_amount ?? 0);
+        let newSgstAmount = Number(sale.sgst_amount ?? 0);
+        let finalAmount;
 
-        if (
-            newDiscount < 0 ||
-            newTax < 0
-        ) {
+        if (gst_mode !== undefined || gst_rate !== undefined) {
+            const breakdown = computeGstBreakdown(
+                Number(sale.sale_amount),
+                newDiscount,
+                newGstMode || "EXCLUSIVE",
+                newGstRate
+            );
+            newGstMode = breakdown.gst_mode;
+            newTax = breakdown.tax_amount;
+            newCgstAmount = breakdown.cgst_amount;
+            newSgstAmount = breakdown.sgst_amount;
+            finalAmount = breakdown.grand_total;
+        } else {
+            if (newDiscount < 0 || newTax < 0) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Discount and tax cannot be negative"
+                });
+            }
 
-            return res.status(400).json({
-                success: false,
-                message:
-                    "Discount and tax cannot be negative"
-            });
+            finalAmount =
+                Number(sale.sale_amount) -
+                newDiscount +
+                newTax;
+
+            newCgstAmount = round2(newTax / 2);
+            newSgstAmount = round2(newTax / 2);
         }
-
-
-        const finalAmount =
-            Number(sale.sale_amount) -
-            newDiscount +
-            newTax;
 
 
         if (finalAmount < 0) {
@@ -752,31 +910,15 @@ const updateSale = async (req, res) => {
         }
 
 
-        const validPaymentStatuses = [
-            "PENDING",
-            "PARTIAL",
-            "PAID",
-            "REFUNDED"
-        ];
-
-
-        const newPaymentStatus =
-            payment_status
-                ? payment_status.toUpperCase()
-                : sale.payment_status;
-
-
-        if (
-            !validPaymentStatuses.includes(
-                newPaymentStatus
-            )
-        ) {
-
-            return res.status(400).json({
-                success: false,
-                message:
-                    "Invalid payment status"
-            });
+        let payment;
+        try {
+            payment = resolvePayment(
+                finalAmount,
+                payment_status || sale.payment_status,
+                amount_paid !== undefined ? amount_paid : sale.amount_paid
+            );
+        } catch (error) {
+            return res.status(400).json({ success: false, message: error.message });
         }
 
 
@@ -826,14 +968,26 @@ const updateSale = async (req, res) => {
 
                     payment_status = $4,
 
-                    payment_method = $5,
+                    amount_paid = $5,
 
-                    notes = COALESCE($6, notes),
+                    balance_due = $6,
+
+                    payment_method = $7,
+
+                    notes = COALESCE($8, notes),
+
+                    gst_mode = $9,
+
+                    gst_rate = $10,
+
+                    cgst_amount = $11,
+
+                    sgst_amount = $12,
 
                     updated_at =
                         CURRENT_TIMESTAMP
 
-                WHERE id = $7
+                WHERE id = $13
 
                 RETURNING *
                 `,
@@ -841,11 +995,17 @@ const updateSale = async (req, res) => {
                     newDiscount,
                     newTax,
                     finalAmount,
-                    newPaymentStatus,
+                    payment.paymentStatus,
+                    payment.amountPaid,
+                    payment.balanceDue,
                     newPaymentMethod,
                     notes !== undefined
                         ? notes.trim()
                         : null,
+                    newGstMode,
+                    newGstRate,
+                    newCgstAmount,
+                    newSgstAmount,
                     id
                 ]
             );
@@ -877,9 +1037,215 @@ const updateSale = async (req, res) => {
 };
 
 
+// CONVERT AN ACCEPTED QUOTATION TO AN INVOICE (SALE)
+//
+// If the quotation's lead has already been converted to a customer (via a
+// CLOSED_WON deal) that customer is reused. Otherwise a CLOSED_WON deal and
+// a customer record are auto-created so accepting a quotation "just works"
+// without forcing the sales rep through a separate manual conversion step.
+// The GST mode + CGST/SGST split stored on the quotation is carried over
+// as-is so the numbers on the invoice match the quotation exactly.
+const convertQuotationToInvoice = async (req, res) => {
+    const client = await pool.connect();
+
+    try {
+        const { quotationId } = req.params;
+        const { payment_status, amount_paid, payment_method, sale_date, notes } = req.body || {};
+
+        await client.query("BEGIN");
+
+        const qRes = await client.query(
+            `SELECT * FROM quotations WHERE id = $1 FOR UPDATE`,
+            [quotationId]
+        );
+
+        if (qRes.rows.length === 0) {
+            await client.query("ROLLBACK");
+            return res.status(404).json({ success: false, message: "Quotation not found" });
+        }
+
+        const quotation = qRes.rows[0];
+
+        // Idempotent — if this quotation was already converted, just return
+        // the existing invoice instead of creating a duplicate one.
+        if (quotation.converted_sale_id) {
+            const existingSale = await client.query(
+                `SELECT * FROM sales WHERE id = $1`,
+                [quotation.converted_sale_id]
+            );
+            await client.query("ROLLBACK");
+            return res.status(200).json({
+                success: true,
+                message: "This quotation has already been converted to an invoice",
+                data: { sale: existingSale.rows[0] || null, quotation }
+            });
+        }
+
+        if (!quotation.lead_id) {
+            await client.query("ROLLBACK");
+            return res.status(400).json({
+                success: false,
+                message: "This quotation has no linked lead, so an invoice cannot be created for it."
+            });
+        }
+
+        // Find an existing customer for this lead
+        let customerRes = await client.query(
+            `SELECT * FROM customers WHERE lead_id = $1 ORDER BY id DESC LIMIT 1`,
+            [quotation.lead_id]
+        );
+        let customer = customerRes.rows[0];
+
+        if (!customer) {
+            // Find (or auto-create) a CLOSED_WON deal for this lead
+            let dealRes = await client.query(
+                `SELECT * FROM deals WHERE lead_id = $1 AND stage = 'CLOSED_WON' ORDER BY id DESC LIMIT 1`,
+                [quotation.lead_id]
+            );
+            let deal = dealRes.rows[0];
+
+            if (!deal) {
+                const leadRes = await client.query(`SELECT * FROM leads WHERE id = $1`, [quotation.lead_id]);
+                const lead = leadRes.rows[0];
+                const dealAssignee = quotation.assigned_to || lead?.assigned_to || req.user.id;
+
+                const dealInsert = await client.query(
+                    `INSERT INTO deals (
+                        lead_id, contact_id, assigned_to, title, description, amount, stage, probability, expected_close_date
+                    ) VALUES ($1,$2,$3,$4,$5,$6,'CLOSED_WON',100,NOW())
+                    RETURNING *`,
+                    [
+                        quotation.lead_id,
+                        null,
+                        dealAssignee,
+                        quotation.subject || quotation.quotation_type || "Converted Deal",
+                        `Auto-created on acceptance of quotation ${quotation.quotation_number}`,
+                        quotation.total_amount || 0
+                    ]
+                );
+                deal = dealInsert.rows[0];
+
+                await client.query(
+                    `UPDATE leads SET status = 'CONVERTED', updated_at = CURRENT_TIMESTAMP WHERE id = $1`,
+                    [quotation.lead_id]
+                );
+            }
+
+            const customerCode = `CUS-${Date.now()}`;
+            const customerInsert = await client.query(
+                `INSERT INTO customers (
+                    lead_id, contact_id, deal_id, assigned_to, customer_code, customer_type, status
+                ) VALUES ($1,$2,$3,$4,$5,'INDIVIDUAL','ACTIVE')
+                RETURNING *`,
+                [quotation.lead_id, deal.contact_id || null, deal.id, deal.assigned_to, customerCode]
+            );
+            customer = customerInsert.rows[0];
+        }
+
+        // Rebuild the GST breakdown from the quotation's own stored figures
+        // so the invoice matches the quotation exactly (No GST / Exclusive / Inclusive).
+        const pricing = quotation.pricing_breakdown || {};
+        const gstMode = quotation.gst_mode || pricing.gst_mode || "EXCLUSIVE";
+        const gstRate = Number(pricing.tax_rate ?? 18);
+        const breakdown = computeGstBreakdown(
+            Number(quotation.subtotal || 0),
+            Number(quotation.discount || 0),
+            gstMode,
+            gstRate
+        );
+
+        const finalInvoiceNumber = generateInvoiceNumber();
+
+        let payment;
+        try {
+            payment = resolvePayment(
+                breakdown.grand_total,
+                payment_status || "UNPAID",
+                amount_paid
+            );
+        } catch (error) {
+            await client.query("ROLLBACK");
+            return res.status(400).json({ success: false, message: error.message });
+        }
+
+        const saleInsert = await client.query(
+            `INSERT INTO sales (
+                customer_id, deal_id, assigned_to, invoice_number,
+                product_service, description, sale_amount, discount, tax, final_amount,
+                payment_status, amount_paid, balance_due, payment_method, sale_date, notes,
+                gst_mode, gst_rate, cgst_amount, sgst_amount, quotation_id
+            ) VALUES (
+                $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21
+            ) RETURNING *`,
+            [
+                customer.id,
+                customer.deal_id,
+                quotation.assigned_to || req.user.id,
+                finalInvoiceNumber,
+                quotation.subject || quotation.product_service || quotation.quotation_type,
+                quotation.description || null,
+                breakdown.taxable_amount,
+                Number(quotation.discount || 0),
+                breakdown.tax_amount,
+                breakdown.grand_total,
+                payment.paymentStatus,
+                payment.amountPaid,
+                payment.balanceDue,
+                payment_method ? payment_method.toUpperCase() : null,
+                sale_date || new Date(),
+                notes?.trim() || `Auto-generated from accepted quotation ${quotation.quotation_number}`,
+                breakdown.gst_mode,
+                gstRate,
+                breakdown.cgst_amount,
+                breakdown.sgst_amount,
+                quotation.id
+            ]
+        );
+
+        const sale = saleInsert.rows[0];
+
+        const updatedQuotationRes = await client.query(
+            `UPDATE quotations
+             SET status = 'ACCEPTED',
+                 is_invoice = true,
+                 invoice_number = $1,
+                 invoice_date = NOW(),
+                 accepted_at = NOW(),
+                 converted_sale_id = $2,
+                 updated_at = NOW()
+             WHERE id = $3
+             RETURNING *`,
+            [finalInvoiceNumber, sale.id, quotation.id]
+        );
+
+        await client.query("COMMIT");
+
+        return res.status(201).json({
+            success: true,
+            message: "Quotation accepted and converted to invoice successfully",
+            data: {
+                sale,
+                quotation: updatedQuotationRes.rows[0]
+            }
+        });
+    } catch (error) {
+        await client.query("ROLLBACK");
+        console.error("convertQuotationToInvoice error:", error);
+        return res.status(500).json({
+            success: false,
+            message: error.message || "Internal server error"
+        });
+    } finally {
+        client.release();
+    }
+};
+
+
 module.exports = {
     createSale,
     getSales,
     getSaleById,
-    updateSale
+    updateSale,
+    deleteSale,
+    convertQuotationToInvoice
 };

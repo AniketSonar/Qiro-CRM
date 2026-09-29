@@ -158,8 +158,11 @@ export function buildDynamicQuotationPdf(quotation) {
   const pricing = raw.pricing_breakdown ?? {
     subtotal: raw.subtotal || raw.total_amount || 0,
     discount: raw.discount || 0,
+    gst_mode: raw.gst_mode || "EXCLUSIVE",
     tax_rate: 18,
     tax_amount: raw.tax || 0,
+    cgst_amount: (raw.tax || 0) / 2,
+    sgst_amount: (raw.tax || 0) / 2,
     grand_total: raw.total_amount || 0
   };
 
@@ -433,8 +436,17 @@ export function buildDynamicQuotationPdf(quotation) {
 
   // ═══════════════════════════════════════════════════════════════
   // STRUCTURED TOTALS SECTION (MATCHING REFERENCE IMAGE)
+  // GST-mode aware: NONE / EXCLUSIVE (add GST on top) / INCLUSIVE (already
+  // included in the total) — always split as CGST + SGST when GST applies.
   // ═══════════════════════════════════════════════════════════════
-  checkPageBreak(90);
+  const gstMode = String(pricing.gst_mode || "EXCLUSIVE").toUpperCase();
+  const gstRateTotal = Number(pricing.tax_rate ?? 18);
+  const cgstRateQ = pricing.cgst_rate ?? (gstMode === "NONE" ? 0 : gstRateTotal / 2);
+  const sgstRateQ = pricing.sgst_rate ?? (gstMode === "NONE" ? 0 : gstRateTotal / 2);
+  const cgstAmtQ = Number(pricing.cgst_amount ?? (gstMode === "NONE" ? 0 : (pricing.tax_amount || 0) / 2));
+  const sgstAmtQ = Number(pricing.sgst_amount ?? (gstMode === "NONE" ? 0 : (pricing.tax_amount || 0) / 2));
+
+  checkPageBreak(160);
 
   // Subtotal Row
   const subTotalH = 34;
@@ -452,6 +464,7 @@ export function buildDynamicQuotationPdf(quotation) {
 
   // Discount Row (if any)
   if (pricing.discount > 0) {
+    checkPageBreak(28);
     const discountH = 28;
     doc.rect(M, y, contentW - colTotal, discountH, "S");
     doc.rect(colStarts[5], y, colTotal, discountH, "S");
@@ -464,15 +477,72 @@ export function buildDynamicQuotationPdf(quotation) {
     y += discountH;
   }
 
-  // Grand Total Row (matching reference image: "(Including 18% GST ) Grand Total :")
+  // GST Rows — only rendered when GST is actually applicable
+  if (gstMode === "NONE") {
+    checkPageBreak(26);
+    const noGstH = 26;
+    doc.rect(M, y, contentW - colTotal, noGstH, "S");
+    doc.rect(colStarts[5], y, colTotal, noGstH, "S");
+    doc.setFont("times", "italic");
+    doc.setFontSize(8.5);
+    doc.setTextColor(100, 116, 139);
+    doc.text("GST :", colStarts[5] - 12, y + noGstH / 2 + 3, { align: "right" });
+    doc.text("Not Applicable (No GST)", M + contentW - 5, y + noGstH / 2 + 3, { align: "right" });
+    y += noGstH;
+  } else {
+    // Taxable value (only shown when Inclusive, so the client can see the
+    // value GST was extracted out of; for Exclusive, Sub Total already IS
+    // the taxable value so this row would be redundant).
+    if (gstMode === "INCLUSIVE") {
+      checkPageBreak(26);
+      const taxableH = 26;
+      doc.rect(M, y, contentW - colTotal, taxableH, "S");
+      doc.rect(colStarts[5], y, colTotal, taxableH, "S");
+      doc.setFont("times", "normal");
+      doc.setFontSize(8.5);
+      doc.setTextColor(30, 41, 59);
+      doc.text("Taxable Value :", colStarts[5] - 12, y + taxableH / 2 + 3, { align: "right" });
+      doc.text(inr(pricing.taxable_amount), M + contentW - 5, y + taxableH / 2 + 3, { align: "right" });
+      y += taxableH;
+    }
+
+    checkPageBreak(52);
+    const gstRowH = 26;
+    const inclSuffix = gstMode === "INCLUSIVE" ? " (Incl.)" : "";
+
+    doc.rect(M, y, contentW - colTotal, gstRowH, "S");
+    doc.rect(colStarts[5], y, colTotal, gstRowH, "S");
+    doc.setFont("times", "normal");
+    doc.setFontSize(9);
+    doc.setTextColor(71, 85, 105);
+    doc.text(`CGST @${cgstRateQ}%${inclSuffix} :`, colStarts[5] - 12, y + gstRowH / 2 + 3.5, { align: "right" });
+    doc.text(inr(cgstAmtQ), M + contentW - 8, y + gstRowH / 2 + 3.5, { align: "right" });
+    y += gstRowH;
+
+    doc.rect(M, y, contentW - colTotal, gstRowH, "S");
+    doc.rect(colStarts[5], y, colTotal, gstRowH, "S");
+    doc.text(`SGST @${sgstRateQ}%${inclSuffix} :`, colStarts[5] - 12, y + gstRowH / 2 + 3.5, { align: "right" });
+    doc.text(inr(sgstAmtQ), M + contentW - 8, y + gstRowH / 2 + 3.5, { align: "right" });
+    y += gstRowH;
+  }
+
+  // Grand Total Row
+  checkPageBreak(38);
   const grandTotalH = 38;
   doc.rect(M, y, contentW - colTotal, grandTotalH, "S");
   doc.rect(colStarts[5], y, colTotal, grandTotalH, "S");
 
+  const grandTotalLabel =
+    gstMode === "NONE"
+      ? "Grand Total (No GST) :"
+      : gstMode === "INCLUSIVE"
+      ? `(Inclusive of ${gstRateTotal}% GST) Grand Total :`
+      : `(Add: ${gstRateTotal}% GST) Grand Total :`;
+
   doc.setFont("times", "bold");
   doc.setFontSize(9.5);
   doc.setTextColor(5, 92, 121);
-  doc.text(`(Including ${pricing.tax_rate ?? 18}% GST ) Grand Total :`, colStarts[5] - 12, y + grandTotalH / 2 + 3.5, { align: "right" });
+  doc.text(grandTotalLabel, colStarts[5] - 12, y + grandTotalH / 2 + 3.5, { align: "right" });
   doc.setFontSize(9.5);
   doc.text(inr(pricing.grand_total), M + contentW - 5, y + grandTotalH / 2 + 3.5, { align: "right" });
   y += grandTotalH;
@@ -896,7 +966,7 @@ function financialYear(dateStr) {
   return `${fy}-${String(fy + 1).slice(2)}`;
 }
 
-export function buildInvoicePdf(sale, customerName = null) {
+export function buildInvoicePdf(sale, customerName = null, options = {}) {
   const doc = new jsPDF({ unit: "pt", format: "a4" });
   const W = doc.internal.pageSize.getWidth();
   const M = 36;
@@ -909,9 +979,23 @@ export function buildInvoicePdf(sale, customerName = null) {
   const saleAmount = Number(raw.sale_amount ?? sale?.amount ?? 0);
   const discount = Number(raw.discount ?? 0);
   const tax = Number(raw.tax ?? 0);
-  const finalAmount = Number(raw.final_amount ?? sale?.amount ?? (saleAmount - discount + tax));
-  const paymentStatus = String(raw.payment_status ?? sale?.status ?? "PENDING").toUpperCase();
-  const dealTitle = raw.deal_title || raw.product_service || "Professional Services";
+  const fullFinalAmount = Number(raw.final_amount ?? sale?.amount ?? (saleAmount - discount + tax));
+  const rawPaymentStatus = String(raw.payment_status ?? sale?.status ?? "UNPAID").toUpperCase();
+  const paymentStatus = rawPaymentStatus === "PENDING"
+    ? "UNPAID"
+    : rawPaymentStatus === "CANCELLED"
+      ? "REFUNDED"
+      : rawPaymentStatus;
+  const originalAmountPaid = Number(raw.amount_paid ?? 0);
+  const originalBalanceDue = Number(raw.balance_due ?? Math.max(fullFinalAmount - originalAmountPaid, 0));
+  const balanceOnly = Boolean(
+    (options.balanceOnly || (paymentStatus === "PARTIAL" && originalBalanceDue > 0))
+      && originalBalanceDue > 0
+  );
+  const finalAmount = balanceOnly ? originalBalanceDue : fullFinalAmount;
+  const amountPaid = balanceOnly ? 0 : originalAmountPaid;
+  const balanceDue = originalBalanceDue;
+  const dealTitle = raw.quotation_type || raw.quotation_subject || raw.product_service || raw.deal_title || "Professional Services";
   const dealAmount = Number(raw.deal_amount ?? finalAmount);
 
   // Client details from lead join
@@ -931,14 +1015,31 @@ export function buildInvoicePdf(sale, customerName = null) {
   const dateObj = new Date(saleDate);
   const formattedDate = `${dateObj.getFullYear()}-${String(dateObj.getMonth() + 1).padStart(2, "0")}-${String(dateObj.getDate()).padStart(2, "0")}`;
 
-  // GST calculations (18% total = CGST 9% + SGST 9%)
-  const taxableAmount = saleAmount - discount;
-  const cgstRate = 9;
-  const sgstRate = 9;
-  const cgstAmt = Math.round(taxableAmount * cgstRate / 100);
-  const sgstAmt = Math.round(taxableAmount * sgstRate / 100);
-  const totalRounded = Math.round(taxableAmount + cgstAmt + sgstAmt);
+  // GST calculations — mode-aware (No GST / Exclusive / Inclusive), always
+  // split as CGST + SGST. For sales created before this feature existed
+  // (cgst_amount/sgst_amount default to 0), fall back to splitting the
+  // legacy `tax` column in half so old invoices still render correctly.
+  const sourceGstMode = String(raw.gst_mode || "EXCLUSIVE").toUpperCase();
+  const gstMode = balanceOnly ? "INCLUSIVE" : sourceGstMode;
+  const gstRateTotal = Number(raw.gst_rate ?? 18);
+  const cgstRate = gstMode === "NONE" ? 0 : gstRateTotal / 2;
+  const sgstRate = gstMode === "NONE" ? 0 : gstRateTotal / 2;
+
+  let cgstAmt = Number(raw.cgst_amount ?? 0);
+  let sgstAmt = Number(raw.sgst_amount ?? 0);
+  if (!cgstAmt && !sgstAmt && tax > 0) {
+    cgstAmt = Math.round(tax / 2);
+    sgstAmt = Math.round(tax / 2);
+  }
+  if (balanceOnly && fullFinalAmount > 0) {
+    const balanceRatio = finalAmount / fullFinalAmount;
+    cgstAmt = Math.round(cgstAmt * balanceRatio * 100) / 100;
+    sgstAmt = Math.round(sgstAmt * balanceRatio * 100) / 100;
+  }
+
+  const totalRounded = Math.round(finalAmount);
   const gstTotal = cgstAmt + sgstAmt;
+  const taxableAmount = totalRounded - gstTotal;
   const invoiceAmount = (amount) => `${Number(amount || 0).toLocaleString("en-IN")}`;
 
   // Dark teal theme (matches reference)
@@ -965,11 +1066,17 @@ export function buildInvoicePdf(sale, customerName = null) {
   doc.setFont("times", "bold");
   doc.setFontSize(11);
   doc.setTextColor(255, 255, 255);
-  doc.text("TAX INVOICE", W / 2, y + 15, { align: "center" });
+  doc.text(balanceOnly ? "BALANCE INVOICE" : "TAX INVOICE", W / 2, y + 15, { align: "center" });
 
   doc.setFontSize(7);
   doc.setTextColor(30, 30, 30);
   doc.text("ORIGINAL FOR RECIPIENT", W - M, y + 8, { align: "right" });
+
+  doc.setFontSize(7);
+  doc.setTextColor(255, 255, 255);
+  const gstModeLabel =
+    gstMode === "NONE" ? "GST: NOT APPLICABLE" : gstMode === "INCLUSIVE" ? "GST: INCLUSIVE" : "GST: EXCLUSIVE";
+  doc.text(gstModeLabel, M + 6, y + 8, { align: "left" });
 
   y += titleH;
 
@@ -1108,7 +1215,7 @@ export function buildInvoicePdf(sale, customerName = null) {
   const colLabels = ["S.N.", "DESCRIPTION", "HSN/SAC", "QTY", "RATE", "AMOUNT"];
 
   colStarts.forEach((cx, i) => {
-    drawCell(cx, y, colWidths[i], thH, { fill: true, fillColor: [230, 240, 240] });
+    drawCell(cx, y, colWidths[i], thH, { fill: true, fillColor: [129, 197, 222] });
   });
 
   doc.setFont("times", "bold");
@@ -1150,24 +1257,34 @@ export function buildInvoicePdf(sale, customerName = null) {
   const summAmtW = colAmt;
   const leftSpanW = colSN + colDesc + colHSN + colQTY;
 
-  const summaryRows = [
-    { label: "TAXABLE AMOUNT", amount: taxableAmount },
-    { label: `CGST @${cgstRate}%`, amount: cgstAmt },
-    { label: `SGST @${sgstRate}%`, amount: sgstAmt },
-    { label: "TOTAL (ROUNDED)", amount: totalRounded, bold: true, icon: true }
-  ];
+  const summaryRows = gstMode === "NONE"
+    ? [
+        { label: "TAXABLE AMOUNT", amount: taxableAmount },
+        { label: "TOTAL (ROUNDED)", amount: totalRounded, bold: true, icon: true }
+      ]
+    : [
+        { label: "TAXABLE AMOUNT", amount: taxableAmount },
+        { label: `CGST @${cgstRate}%`, amount: cgstAmt },
+        { label: `SGST @${sgstRate}%`, amount: sgstAmt },
+        { label: "TOTAL (ROUNDED)", amount: totalRounded, bold: true, icon: true }
+      ];
 
-  const leftLabels = [
-    "",
-    `GST Amount : ${numberToWordsINR(gstTotal)}`,
-    "",
-    `Invoice Value : ${numberToWordsINR(totalRounded)}`
-  ];
+  const leftLabels = gstMode === "NONE"
+    ? [
+        "GST : Not Applicable",
+        `Invoice Value : ${numberToWordsINR(totalRounded)}`
+      ]
+    : [
+        "",
+        `GST Amount : ${numberToWordsINR(gstTotal)}`,
+        "",
+        `Invoice Value : ${numberToWordsINR(totalRounded)}`
+      ];
 
   summaryRows.forEach((row, i) => {
     const rowH = row.bold ? 28 : 22;
     drawCell(M, y, leftSpanW, rowH);
-    drawCell(summX, y, summLabelW, rowH, row.bold ? { fill: true, fillColor: [230, 240, 240] } : {});
+    drawCell(summX, y, summLabelW, rowH, row.bold ? { fill: true, fillColor: [130, 196, 222] } : {});
     drawCell(summX + summLabelW, y, summAmtW, rowH);
 
     if (leftLabels[i]) {
@@ -1198,7 +1315,7 @@ export function buildInvoicePdf(sale, customerName = null) {
   // ═══════════════════════════════════════════════════════════════
   // Bank Details (left) | Grand Total / Deal / Bill (right)
   // ═══════════════════════════════════════════════════════════════
-  const bankSectionH = 120;
+  const bankSectionH = 150;
   const totalsW = summLabelW + summAmtW;
 
   drawCell(M, y, leftSpanW, bankSectionH);
@@ -1240,10 +1357,23 @@ export function buildInvoicePdf(sale, customerName = null) {
   } else if (paymentStatus === "PARTIAL") {
     doc.setTextColor(234, 88, 12);
     doc.text("PARTIALLY PAID", M + 90, by);
+  } else if (paymentStatus === "REFUNDED") {
+    doc.setTextColor(220, 38, 38);
+    doc.text("REFUNDED", M + 90, by);
   } else {
     doc.setTextColor(220, 38, 38);
-    doc.text("PENDING", M + 90, by);
+    doc.text("UNPAID", M + 90, by);
   }
+  by += 13;
+  doc.setTextColor(30, 30, 30);
+  doc.text("Amount Paid :", M + 8, by);
+  doc.setFont("times", "normal");
+  doc.text(inr(amountPaid), M + 90, by);
+  by += 13;
+  doc.setFont("times", "bold");
+  doc.text("Balance Due :", M + 8, by);
+  doc.setFont("times", "normal");
+  doc.text(inr(balanceDue), M + 90, by);
   doc.setTextColor(30, 30, 30);
 
   // Right side — Grand TOTAL
@@ -1299,18 +1429,18 @@ export function buildInvoicePdf(sale, customerName = null) {
   return doc;
 }
 
-export function downloadInvoicePdf(sale, customerName = null) {
-  const doc = buildInvoicePdf(sale, customerName);
+export function downloadInvoicePdf(sale, customerName = null, options = {}) {
+  const doc = buildInvoicePdf(sale, customerName, options);
   const raw = sale?.raw ?? sale ?? {};
   const invNum = raw.invoice_number || sale?.id || "INV";
-  doc.save(`Invoice-${invNum}.pdf`);
+  doc.save(`${options.balanceOnly ? "Balance-Invoice" : "Invoice"}-${invNum}.pdf`);
 }
 
-export async function shareInvoicePdf(sale, customerName = null) {
-  const doc = buildInvoicePdf(sale, customerName);
+export async function shareInvoicePdf(sale, customerName = null, options = {}) {
+  const doc = buildInvoicePdf(sale, customerName, options);
   const raw = sale?.raw ?? sale ?? {};
   const invNum = raw.invoice_number || sale?.id || "INV";
-  const fileName = `Invoice-${invNum}.pdf`;
+  const fileName = `${options.balanceOnly ? "Balance-Invoice" : "Invoice"}-${invNum}.pdf`;
   const blob = doc.output("blob");
   const file = new File([blob], fileName, { type: "application/pdf" });
 

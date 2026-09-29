@@ -260,8 +260,16 @@ const mapSales = (res) =>
     id: s.invoice_number || `INV-${s.id}`,
     customer: s.deal_title || s.customer_code || "—",
     amount: num(s.final_amount ?? s.sale_amount),
+    amountPaid: num(s.amount_paid),
+    balanceDue: num(s.balance_due ?? Math.max(Number(s.final_amount ?? 0) - Number(s.amount_paid ?? 0), 0)),
     date: dateLabel(s.sale_date || s.created_at),
-    status: titleCase(s.payment_status),
+    status: titleCase(
+      s.payment_status === "PENDING"
+        ? "UNPAID"
+        : s.payment_status === "CANCELLED"
+          ? "REFUNDED"
+          : s.payment_status
+    ),
     owner: s.assigned_user || "Unassigned",
     raw: s
   }));
@@ -549,6 +557,9 @@ export const useLeadDeals = (id) =>
 export const useLeadQuotations = (id) =>
   useRaw(id ? `/quotations?lead_id=${id}` : null, (r) => r?.data ?? [], []);
 
+export const useLeadSales = (id) =>
+  useRaw(id ? `/sales?lead_id=${id}&limit=100` : null, (r) => r?.data?.sales ?? [], []);
+
 export const personLabel = (row) =>
   [row?.first_name, row?.last_name].filter(Boolean).join(" ").trim() ||
   row?.email ||
@@ -600,7 +611,9 @@ export const crud = {
   },
   sales: {
     create: (body) => run(api.post("/sales", body)),
-    update: (id, body) => run(api.put(`/sales/${id}`, body))
+    update: (id, body) => run(api.put(`/sales/${id}`, body)),
+    remove: (id) => run(api.del(`/sales/${id}`)),
+    convertQuotation: (id) => run(api.post(`/sales/from-quotation/${id}`, {}))
   },
   users: {
     create: (body) => run(api.post("/users", body)),

@@ -174,6 +174,10 @@ const getSalesReport = async (req, res) => {
 
                 COALESCE(SUM(final_amount), 0) AS total_revenue,
 
+                COALESCE(SUM(amount_paid), 0) AS total_collected,
+
+                COALESCE(SUM(balance_due), 0) AS total_outstanding,
+
                 COALESCE(AVG(final_amount), 0) AS average_sale
             FROM sales
         `);

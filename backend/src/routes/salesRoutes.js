@@ -4,7 +4,9 @@ const {
     createSale,
     getSales,
     getSaleById,
-    updateSale
+    updateSale,
+    deleteSale,
+    convertQuotationToInvoice
 } = require("../controllers/salesController");
 
 const authenticate =
@@ -65,6 +67,20 @@ router.put(
         "SALES_PERSON"
     ),
     updateSale
+);
+
+router.delete(
+    "/:id",
+    authenticate,
+    authorize("ADMIN", "SALES_MANAGER"),
+    deleteSale
+);
+
+router.post(
+    "/from-quotation/:quotationId",
+    authenticate,
+    authorize("ADMIN", "SALES_MANAGER", "SALES_PERSON"),
+    convertQuotationToInvoice
 );
 
 

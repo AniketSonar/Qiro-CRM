@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import {
   ArrowLeft,
@@ -13,6 +13,7 @@ import {
   Paperclip,
   Share2,
   FileDown,
+  FileCheck,
   FileText,
   Trash2,
   Pencil
@@ -39,7 +40,6 @@ import {
 } from "../components/crm/form";
 import { currency } from "../lib/crm-data";
 import {
-  addAttachment,
   buildDynamicQuotationPdf,
   downloadAttachment,
   downloadInvoicePdf,
@@ -56,11 +56,13 @@ import {
   titleCase,
   useLeadDeals,
   useLeadQuotations,
+  useLeadSales,
   useLeadFollowUps,
   useLeadRecord,
   useLookups
 } from "../lib/crm-store";
 import { QuotationBuilderModal } from "./Quotations";
+import { SaleForm } from "./Sales";
 
 const LEAD_STATUSES = [
   "NEW",
@@ -420,32 +422,20 @@ function TouchCard({ row, onComplete, onCancel, onEdit }) {
 }
 
 
-function DocumentCard({ deal, lead, documentType, onEdit, onStage }) {
-  const fileInput = useRef(null);
+function DocumentCard({ deal, lead, documentType, invoice, invoiceId, onDelete, onEdit, onStage }) {
   const [files, setFiles] = useState(() => listAttachments(deal.id, documentType));
   const [error, setError] = useState(null);
   const [busy, setBusy] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const isQuotation = documentType === "quotation";
   const title = isQuotation ? "Quotation" : "Invoice";
   const preparedBy = { name: deal.assigned_user || "Sales Representative" };
-
-  const pick = async (event) => {
-    const file = event.target.files?.[0];
-    event.target.value = "";
-    if (!file) return;
-    setError(null);
-    try {
-      setFiles(await addAttachment(deal.id, file, documentType));
-    } catch (err) {
-      setError(err.message);
-    }
-  };
 
   const generateAndDownload = () => {
     if (isQuotation) {
       shareQuotationPdf({ deal, lead, preparedBy });
     } else {
-      downloadInvoicePdf(deal, lead?.company || lead?.first_name);
+      downloadInvoicePdf(invoice, lead?.company || lead?.first_name);
     }
   };
 
@@ -458,7 +448,7 @@ function DocumentCard({ deal, lead, documentType, onEdit, onStage }) {
       } else if (isQuotation) {
         await shareQuotationPdf({ deal, lead, preparedBy });
       } else {
-        await shareInvoicePdf(deal, lead?.company || lead?.first_name);
+        await shareInvoicePdf(invoice, lead?.company || lead?.first_name);
       }
     } catch (err) {
       setError(err?.message ?? "Could not build or share the PDF");
@@ -467,12 +457,24 @@ function DocumentCard({ deal, lead, documentType, onEdit, onStage }) {
     }
   };
 
+  const remove = async () => {
+    if (!invoiceId || !window.confirm(`Delete invoice for ${deal.title || "this deal"}? This cannot be undone.`)) return;
+    setDeleting(true);
+    setError(null);
+    try {
+      await onDelete(invoiceId);
+    } catch (err) {
+      setError(err.message || "Failed to delete invoice");
+      setDeleting(false);
+    }
+  };
+
   return (
     <div className="panel p-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <p className="font-display text-base font-extrabold">
-            {deal.title} — {currency(Number(deal.amount ?? 0))}
+            {invoice?.quotation_type || invoice?.quotation_subject || deal.title} — {currency(Number(invoice?.final_amount ?? deal.amount ?? 0))}
           </p>
           <p className="mt-1 text-sm text-muted-foreground">
             Assigned to {deal.assigned_user ?? "—"} · Probability {deal.probability ?? 0}% · Expected
@@ -488,7 +490,7 @@ function DocumentCard({ deal, lead, documentType, onEdit, onStage }) {
           {deal.description ? <p className="mt-2 text-sm">{deal.description}</p> : null}
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <GhostButton onClick={() => onEdit(deal)}>Edit</GhostButton>
+          <GhostButton onClick={() => onEdit(invoice || deal)}>Edit</GhostButton>
           <Select
             className="w-[180px] font-semibold"
             value={deal.stage ?? "QUALIFIED"}
@@ -504,22 +506,17 @@ function DocumentCard({ deal, lead, documentType, onEdit, onStage }) {
       </div>
 
       <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-border pt-4">
-        <button
-          type="button"
-          onClick={generateAndDownload}
-          disabled={busy}
-          className="brand-surface inline-flex h-10 items-center gap-2 rounded-xl px-4 text-sm font-semibold text-primary-foreground disabled:opacity-60"
-        >
+        <GhostButton onClick={generateAndDownload} disabled={busy}>
           <FileDown className="size-4" /> Download {title} PDF
-        </button>
+        </GhostButton>
         <GhostButton onClick={share} disabled={busy}>
           <Share2 className="size-4" /> Share
         </GhostButton>
-        <GhostButton onClick={() => fileInput.current?.click()}>
-          <Paperclip className="size-4" /> Attach custom PDF
-        </GhostButton>
-        <input ref={fileInput} type="file" className="hidden" onChange={pick} />
-        
+        {invoiceId ? (
+          <GhostButton onClick={remove} disabled={deleting} className="text-destructive hover:text-destructive">
+            <Trash2 className="size-4" /> {deleting ? "Deleting…" : "Delete invoice"}
+          </GhostButton>
+        ) : null}
       </div>
 
       {error ? (
@@ -560,8 +557,10 @@ function DocumentCard({ deal, lead, documentType, onEdit, onStage }) {
   );
 }
 
-function QuotationRecordCard({ quotation, onSend }) {
+function QuotationRecordCard({ quotation, onShare, onConvert, onDelete }) {
   const [busy, setBusy] = useState(false);
+  const [converting, setConverting] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState(null);
 
   const download = () => {
@@ -569,15 +568,39 @@ function QuotationRecordCard({ quotation, onSend }) {
     doc.save(`Quotation-${quotation.quotation_number || "Document"}.pdf`);
   };
 
-  const send = async () => {
+  const share = async () => {
     setBusy(true);
     setError(null);
     try {
-      await onSend(quotation);
+      await onShare(quotation);
     } catch (err) {
-      setError(err.message || "Failed to send quotation");
+      setError(err.message || "Failed to share quotation");
     } finally {
       setBusy(false);
+    }
+  };
+
+  const convert = async () => {
+    setConverting(true);
+    setError(null);
+    try {
+      await onConvert(quotation);
+    } catch (err) {
+      setError(err.message || "Failed to convert quotation to invoice");
+    } finally {
+      setConverting(false);
+    }
+  };
+
+  const remove = async () => {
+    if (!window.confirm(`Delete quotation #${quotation.quotation_number}? This cannot be undone.`)) return;
+    setDeleting(true);
+    setError(null);
+    try {
+      await onDelete(quotation.id);
+    } catch (err) {
+      setError(err.message || "Failed to delete quotation");
+      setDeleting(false);
     }
   };
 
@@ -602,8 +625,19 @@ function QuotationRecordCard({ quotation, onSend }) {
       </div>
       <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-border pt-4">
         <GhostButton onClick={download}><FileDown className="size-4" /> Download PDF</GhostButton>
-        <GhostButton onClick={send} disabled={busy || quotation.status === "SENT"}>
-          <Share2 className="size-4" /> {busy ? "Sending…" : quotation.status === "SENT" ? "Sent" : "Send by email"}
+        <GhostButton onClick={share} disabled={busy}>
+          <Share2 className="size-4" /> {busy ? "Sharing…" : "Share"}
+        </GhostButton>
+        <GhostButton
+          onClick={convert}
+          disabled={converting || quotation.is_invoice}
+          title={quotation.is_invoice ? `Already invoiced (#${quotation.invoice_number})` : "Accept & Convert to Invoice"}
+        >
+          <FileCheck className="size-4" />
+          {converting ? "Converting…" : quotation.is_invoice ? "Invoiced" : "Accept & Convert to Invoice"}
+        </GhostButton>
+        <GhostButton onClick={remove} disabled={deleting} className="text-destructive hover:text-destructive">
+          <Trash2 className="size-4" /> {deleting ? "Deleting…" : "Delete"}
         </GhostButton>
       </div>
       {error ? <p className="mt-3 text-sm font-semibold text-destructive">{error}</p> : null}
@@ -619,11 +653,14 @@ export default function LeadDetail() {
   const { data: touches } = useLeadFollowUps(id);
   const { data: deals } = useLeadDeals(id);
   const { data: quotations } = useLeadQuotations(id);
-  const { users, outcomes, sources } = useLookups();
+  const { data: sales } = useLeadSales(id);
+  const lookups = useLookups();
+  const { users, outcomes, sources } = lookups;
 
   const [touchForm, setTouchForm] = useState(null); // { kind, row }
   const [complete, setComplete] = useState(null);
   const [dealForm, setDealForm] = useState(null);
+  const [saleForm, setSaleForm] = useState(null);
   const [lost, setLost] = useState(null);
   const [leadInfoOpen, setLeadInfoOpen] = useState(false);
   const [quotationBuilderOpen, setQuotationBuilderOpen] = useState(false);
@@ -645,6 +682,9 @@ export default function LeadDetail() {
 
   const name =
     [lead?.first_name, lead?.last_name].filter(Boolean).join(" ") || lead?.email || `Lead ${id}`;
+  const invoiceDeals = deals.filter((deal) =>
+    sales.some((sale) => Number(sale.deal_id) === Number(deal.id))
+  );
 
   if (!lead) {
     return (
@@ -811,14 +851,18 @@ export default function LeadDetail() {
             <QuotationRecordCard
               key={quotation.id}
               quotation={quotation}
-              onSend={async (row) => {
-                const targetEmail = row.customer_email || row.client_details?.email || lead.email;
-                if (!targetEmail) throw new Error("This lead has no email address.");
-                const doc = buildDynamicQuotationPdf(row);
-                await crud.quotations.sendEmail(row.id, {
-                  pdf_base64: doc.output("datauristring"),
-                  recipient_email: targetEmail
-                });
+              onShare={async (row) => {
+                await shareQuotationPdf(row);
+              }}
+              onConvert={async (row) => {
+                if (row.is_invoice) return;
+                if (!window.confirm(`Mark quotation #${row.quotation_number} as accepted and generate an invoice for it?`)) {
+                  return;
+                }
+                await crud.sales.convertQuotation(row.id);
+              }}
+              onDelete={async (quotationId) => {
+                await crud.quotations.remove(quotationId);
               }}
             />
           ))
@@ -829,18 +873,32 @@ export default function LeadDetail() {
         title="Invoice"
         description="Attach and share the invoice PDF for each deal"
       >
-        {deals.length === 0 ? (
+        {invoiceDeals.length === 0 ? (
           <Panel>
             <p className="text-sm text-muted-foreground">Create a quotation / deal before attaching an invoice.</p>
           </Panel>
         ) : (
-          deals.map((d) => (
+          invoiceDeals.map((d) => (
             <DocumentCard
               key={`invoice-${d.id}`}
               deal={d}
               lead={lead}
               documentType="invoice"
-              onEdit={setDealForm}
+              invoice={sales.find((sale) => Number(sale.deal_id) === Number(d.id))}
+              invoiceId={
+                sales.find((sale) => Number(sale.deal_id) === Number(d.id))?.id ||
+                sales.find((sale) =>
+                  quotations.some(
+                    (quotation) =>
+                      Number(quotation.converted_sale_id) === Number(sale.id) &&
+                      (!quotation.deal_id || Number(quotation.deal_id) === Number(d.id))
+                  )
+                )?.id
+              }
+              onDelete={async (invoiceId) => {
+                await crud.sales.remove(invoiceId);
+              }}
+              onEdit={(invoice) => setSaleForm({ mode: "edit", sale: { id: invoice.id, raw: invoice } })}
               onStage={(deal, next) => {
                 if (next === "CLOSED_LOST") setLost(deal);
                 else crud.deals.setStage(deal.id, next);
@@ -871,12 +929,20 @@ export default function LeadDetail() {
         users={assignable}
         onClose={() => setDealForm(null)}
       />
+      <SaleForm
+        open={Boolean(saleForm)}
+        mode={saleForm?.mode}
+        sale={saleForm?.sale}
+        lookups={lookups}
+        onClose={() => setSaleForm(null)}
+      />
       <LostForm open={Boolean(lost)} deal={lost} onClose={() => setLost(null)} />
       <QuotationBuilderModal
+        key={`lead-${id}`}
         open={quotationBuilderOpen}
         initialLeadId={id}
         onClose={() => setQuotationBuilderOpen(false)}
-        onSaved={() => window.location.reload()}
+        onSaved={() => setQuotationBuilderOpen(false)}
       />
     </AppShell>
   );

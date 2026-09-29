@@ -1,5 +1,6 @@
 ﻿const pool = require("../config/db");
 const nodemailer = require("nodemailer");
+const { computeGstBreakdown } = require("../utils/gst");
 
 /**
  * Generate sequential Quotation Number in format: Q-YYYY-XXXX (e.g. Q-2026-0026)
@@ -125,6 +126,7 @@ const createQuotation = async (req, res) => {
             client_details = {},
             discount = 0,
             tax_rate = 18,
+            gst_mode = "EXCLUSIVE",
             valid_until,
             terms_conditions,
             status = "DRAFT"
@@ -177,17 +179,21 @@ const createQuotation = async (req, res) => {
             };
         });
 
-        const discountAmt = Number(discount) || 0;
-        const taxableAmount = Math.max(0, subtotal - discountAmt);
-        const taxRate = Number(tax_rate) >= 0 ? Number(tax_rate) : 18;
-        const taxAmount = (taxableAmount * taxRate) / 100;
-        const grandTotal = Math.round(taxableAmount + taxAmount);
+        const breakdown = computeGstBreakdown(subtotal, discount, gst_mode, tax_rate);
+        const discountAmt = breakdown.discount;
+        const taxAmount = breakdown.tax_amount;
+        const grandTotal = breakdown.grand_total;
 
         const pricingBreakdown = {
             subtotal,
             discount: discountAmt,
-            taxable_amount: taxableAmount,
-            tax_rate: taxRate,
+            taxable_amount: breakdown.taxable_amount,
+            gst_mode: breakdown.gst_mode,
+            tax_rate: breakdown.tax_rate,
+            cgst_rate: breakdown.cgst_rate,
+            sgst_rate: breakdown.sgst_rate,
+            cgst_amount: breakdown.cgst_amount,
+            sgst_amount: breakdown.sgst_amount,
             tax_amount: taxAmount,
             grand_total: grandTotal
         };
@@ -225,13 +231,14 @@ const createQuotation = async (req, res) => {
                 inclusions,
                 client_details,
                 pricing_breakdown,
+                gst_mode,
                 created_at,
                 updated_at
             )
             VALUES (
                 $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
                 $11, $12, $13, $14, $15, $16, $17, $18, $19, $20,
-                $21, $22, $23, $24, $25, $26, $27, NOW(), NOW()
+                $21, $22, $23, $24, $25, $26, $27, $28, NOW(), NOW()
             )
             RETURNING *
         `;
@@ -263,7 +270,8 @@ const createQuotation = async (req, res) => {
             JSON.stringify(timeline_items),
             JSON.stringify(inclusions),
             JSON.stringify(fullClientDetails),
-            JSON.stringify(pricingBreakdown)
+            JSON.stringify(pricingBreakdown),
+            breakdown.gst_mode
         ]);
 
         return res.status(201).json({
@@ -294,6 +302,7 @@ const updateQuotation = async (req, res) => {
             client_details = {},
             discount = 0,
             tax_rate = 18,
+            gst_mode,
             valid_until,
             terms_conditions,
             status
@@ -323,17 +332,27 @@ const updateQuotation = async (req, res) => {
             };
         });
 
-        const discountAmt = discount !== undefined ? Number(discount) : Number(existing.discount || 0);
-        const taxableAmount = Math.max(0, subtotal - discountAmt);
-        const taxRate = tax_rate !== undefined ? Number(tax_rate) : 18;
-        const taxAmount = (taxableAmount * taxRate) / 100;
-        const grandTotal = Math.round(taxableAmount + taxAmount);
+        const existingPricing = existing.pricing_breakdown || {};
+        const effectiveGstMode = gst_mode !== undefined
+            ? gst_mode
+            : (existing.gst_mode || existingPricing.gst_mode || "EXCLUSIVE");
+        const effectiveTaxRate = tax_rate !== undefined ? Number(tax_rate) : Number(existingPricing.tax_rate ?? 18);
+
+        const breakdown = computeGstBreakdown(subtotal, discount, effectiveGstMode, effectiveTaxRate);
+        const discountAmt = breakdown.discount;
+        const taxAmount = breakdown.tax_amount;
+        const grandTotal = breakdown.grand_total;
 
         const pricingBreakdown = {
             subtotal,
             discount: discountAmt,
-            taxable_amount: taxableAmount,
-            tax_rate: taxRate,
+            taxable_amount: breakdown.taxable_amount,
+            gst_mode: breakdown.gst_mode,
+            tax_rate: breakdown.tax_rate,
+            cgst_rate: breakdown.cgst_rate,
+            sgst_rate: breakdown.sgst_rate,
+            cgst_amount: breakdown.cgst_amount,
+            sgst_amount: breakdown.sgst_amount,
             tax_amount: taxAmount,
             grand_total: grandTotal
         };
@@ -355,8 +374,9 @@ const updateQuotation = async (req, res) => {
                 status = COALESCE($13, status),
                 valid_until = COALESCE($14, valid_until),
                 terms_conditions = COALESCE($15, terms_conditions),
+                gst_mode = $16,
                 updated_at = NOW()
-            WHERE id = $16
+            WHERE id = $17
             RETURNING *
         `;
 
@@ -376,6 +396,7 @@ const updateQuotation = async (req, res) => {
             status || null,
             valid_until || null,
             terms_conditions || null,
+            breakdown.gst_mode,
             id
         ]);
 

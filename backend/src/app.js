@@ -3,7 +3,7 @@ const cors = require("cors");
 require("dotenv").config();
 
 const pool = require("./config/db");
-const { initSalarySchema } = require("./config/db");
+const { initSalarySchema, initQuotationSchema, initSalesGstSchema } = require("./config/db");
 const authRoutes = require("./routes/authRoutes");
 const userRoutes = require("./routes/userRoutes");
 const dashboardRoutes = require("./routes/dashboardRoutes");
@@ -25,6 +25,14 @@ const quotationRoutes = require("./routes/quotationRoutes");
 
 
 const app = express();
+
+process.on("uncaughtException", (error) => {
+    console.error("Uncaught backend exception:", error);
+});
+
+process.on("unhandledRejection", (reason) => {
+    console.error("Unhandled backend promise rejection:", reason);
+});
 
 app.use(cors());
 app.use(cors({
@@ -94,12 +102,14 @@ app.use((error, req, res, next) => {
 const PORT = process.env.PORT || 5000;
 
 initSalarySchema()
+    .then(() => initQuotationSchema())
+    .then(() => initSalesGstSchema())
     .then(() => {
         app.listen(PORT, () => {
             console.log(`CRM Backend running on port ${PORT}`);
         });
     })
     .catch((error) => {
-        console.error("Salary schema initialization failed:", error);
+        console.error("Schema initialization failed:", error);
         process.exit(1);
     });

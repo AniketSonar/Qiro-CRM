@@ -5,7 +5,12 @@ const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
     ssl: {
         rejectUnauthorized: false
-    }
+    },
+    max: Number(process.env.DB_POOL_MAX || 5),
+    idleTimeoutMillis: Number(process.env.DB_IDLE_TIMEOUT_MS || 30000),
+    connectionTimeoutMillis: Number(process.env.DB_CONNECTION_TIMEOUT_MS || 10000),
+    keepAlive: true,
+    keepAliveInitialDelayMillis: 10000
 });
 
 pool.on("connect", () => {
@@ -86,5 +91,57 @@ const initSalarySchema = async () => {
 };
 
 module.exports.initSalarySchema = initSalarySchema;
+
+/**
+ * Adds GST-mode + invoice-conversion tracking columns to the quotations table.
+ * Safe to run repeatedly (IF NOT EXISTS guards on every column).
+ */
+const initQuotationSchema = async () => {
+    await pool.query(`
+        ALTER TABLE quotations ADD COLUMN IF NOT EXISTS gst_mode VARCHAR(10) NOT NULL DEFAULT 'EXCLUSIVE';
+        ALTER TABLE quotations ADD COLUMN IF NOT EXISTS is_invoice BOOLEAN NOT NULL DEFAULT false;
+        ALTER TABLE quotations ADD COLUMN IF NOT EXISTS invoice_number VARCHAR(50);
+        ALTER TABLE quotations ADD COLUMN IF NOT EXISTS invoice_date TIMESTAMP;
+        ALTER TABLE quotations ADD COLUMN IF NOT EXISTS accepted_at TIMESTAMP;
+        ALTER TABLE quotations ADD COLUMN IF NOT EXISTS converted_sale_id INTEGER;
+    `);
+};
+
+module.exports.initQuotationSchema = initQuotationSchema;
+
+/**
+ * Adds GST-mode columns + quotation linkage to the sales (Invoices) table.
+ * Safe to run repeatedly (IF NOT EXISTS guards on every column).
+ */
+const initSalesGstSchema = async () => {
+    await pool.query(`
+        ALTER TABLE sales ADD COLUMN IF NOT EXISTS gst_mode VARCHAR(10) NOT NULL DEFAULT 'EXCLUSIVE';
+        ALTER TABLE sales ADD COLUMN IF NOT EXISTS gst_rate NUMERIC(5,2) NOT NULL DEFAULT 18;
+        ALTER TABLE sales ADD COLUMN IF NOT EXISTS cgst_amount NUMERIC(12,2) NOT NULL DEFAULT 0;
+        ALTER TABLE sales ADD COLUMN IF NOT EXISTS sgst_amount NUMERIC(12,2) NOT NULL DEFAULT 0;
+        ALTER TABLE sales ADD COLUMN IF NOT EXISTS quotation_id INTEGER;
+        ALTER TABLE sales ADD COLUMN IF NOT EXISTS amount_paid NUMERIC(12,2) NOT NULL DEFAULT 0;
+        ALTER TABLE sales ADD COLUMN IF NOT EXISTS balance_due NUMERIC(12,2) NOT NULL DEFAULT 0;
+        ALTER TABLE sales DROP CONSTRAINT IF EXISTS sale_payment_status_check;
+        UPDATE sales
+        SET amount_paid = CASE
+            WHEN payment_status = 'PAID' THEN GREATEST(COALESCE(final_amount, 0), 0)
+            ELSE LEAST(GREATEST(COALESCE(amount_paid, 0), 0), GREATEST(COALESCE(final_amount, 0), 0))
+        END;
+        UPDATE sales
+        SET balance_due = GREATEST(COALESCE(final_amount, 0) - COALESCE(amount_paid, 0), 0),
+            payment_status = CASE
+                WHEN payment_status = 'CANCELLED' THEN 'REFUNDED'
+                WHEN COALESCE(amount_paid, 0) >= COALESCE(final_amount, 0) AND COALESCE(final_amount, 0) > 0 THEN 'PAID'
+                WHEN COALESCE(amount_paid, 0) > 0 THEN 'PARTIAL'
+                ELSE 'UNPAID'
+            END;
+        ALTER TABLE sales
+            ADD CONSTRAINT sale_payment_status_check
+            CHECK (payment_status IN ('UNPAID', 'PARTIAL', 'PAID', 'REFUNDED'));
+    `);
+};
+
+module.exports.initSalesGstSchema = initSalesGstSchema;
 
 

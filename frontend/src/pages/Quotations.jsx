@@ -6,7 +6,6 @@ import {
   Trash2,
   Edit,
   Eye,
-  Send,
   Download,
   Share2,
   CheckCircle2,
@@ -150,6 +149,9 @@ export function QuotationBuilderModal({ open, quotation, initialLeadId, onClose,
   const [quotationType, setQuotationType] = useState(quotation?.quotation_type || QUOTATION_TYPES[0]);
   const [discount, setDiscount] = useState(quotation?.discount ?? 0);
   const [taxRate, setTaxRate] = useState(quotation?.pricing_breakdown?.tax_rate ?? 18);
+  const [gstMode, setGstMode] = useState(
+    quotation?.gst_mode || quotation?.pricing_breakdown?.gst_mode || "EXCLUSIVE"
+  );
   const [validUntil, setValidUntil] = useState(
     quotation?.valid_until ? quotation.valid_until.split("T")[0] : ""
   );
@@ -275,15 +277,40 @@ export function QuotationBuilderModal({ open, quotation, initialLeadId, onClose,
     }
   };
 
-  // Pricing calculations
+  // Pricing calculations — GST-mode aware (No GST / Exclusive / Inclusive),
+  // always split as CGST + SGST (standard Indian intra-state split).
   const subtotal = useMemo(() => {
     return items.reduce((acc, it) => acc + (Number(it.total) || 0), 0);
   }, [items]);
 
   const discountAmount = Number(discount) || 0;
-  const taxableAmount = Math.max(0, subtotal - discountAmount);
-  const taxAmount = (taxableAmount * (Number(taxRate) || 18)) / 100;
-  const grandTotal = Math.round(taxableAmount + taxAmount);
+  const preTaxAmount = Math.max(0, subtotal - discountAmount);
+  const effectiveTaxRate = Number(taxRate) || 18;
+
+  let taxableAmount = preTaxAmount;
+  let taxAmount = 0;
+  let grandTotal = preTaxAmount;
+
+  if (gstMode === "NONE") {
+    taxableAmount = preTaxAmount;
+    taxAmount = 0;
+    grandTotal = preTaxAmount;
+  } else if (gstMode === "INCLUSIVE") {
+    grandTotal = preTaxAmount;
+    taxableAmount = effectiveTaxRate > 0 ? grandTotal / (1 + effectiveTaxRate / 100) : grandTotal;
+    taxAmount = grandTotal - taxableAmount;
+    grandTotal = Math.round(grandTotal);
+  } else {
+    // EXCLUSIVE (default)
+    taxableAmount = preTaxAmount;
+    taxAmount = (preTaxAmount * effectiveTaxRate) / 100;
+    grandTotal = Math.round(taxableAmount + taxAmount);
+  }
+
+  const cgstRate = gstMode === "NONE" ? 0 : effectiveTaxRate / 2;
+  const sgstRate = gstMode === "NONE" ? 0 : effectiveTaxRate / 2;
+  const cgstAmount = taxAmount / 2;
+  const sgstAmount = taxAmount / 2;
 
   // Item helpers
   const addItem = () => {
@@ -396,8 +423,14 @@ export function QuotationBuilderModal({ open, quotation, initialLeadId, onClose,
       pricing_breakdown: {
         subtotal,
         discount: discountAmount,
-        tax_rate: Number(taxRate) || 18,
+        gst_mode: gstMode,
+        tax_rate: effectiveTaxRate,
         tax_amount: taxAmount,
+        cgst_rate: cgstRate,
+        sgst_rate: sgstRate,
+        cgst_amount: cgstAmount,
+        sgst_amount: sgstAmount,
+        taxable_amount: taxableAmount,
         grand_total: grandTotal
       },
       terms_conditions: terms
@@ -437,7 +470,8 @@ export function QuotationBuilderModal({ open, quotation, initialLeadId, onClose,
           city: "Pune, Maharashtra"
         },
         discount: discountAmount,
-        tax_rate: Number(taxRate) || 18,
+        gst_mode: gstMode,
+        tax_rate: effectiveTaxRate,
         valid_until: validUntil || null,
         terms_conditions: terms,
         status
@@ -643,7 +677,7 @@ export function QuotationBuilderModal({ open, quotation, initialLeadId, onClose,
 
             {/* Pricing Summary Row */}
             <div className="flex justify-end pt-2">
-              <div className="w-72 rounded-xl border border-border p-3 space-y-2 bg-muted/10 text-xs">
+              <div className="w-80 rounded-xl border border-border p-3 space-y-2 bg-muted/10 text-xs">
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Subtotal:</span>
                   <span className="font-semibold">{currency(subtotal)}</span>
@@ -658,17 +692,68 @@ export function QuotationBuilderModal({ open, quotation, initialLeadId, onClose,
                     onChange={(e) => setDiscount(e.target.value)}
                   />
                 </div>
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-muted-foreground">GST Rate (%):</span>
-                  <input
-                    type="number"
-                    min="0"
-                    max="28"
-                    className="w-24 rounded border border-input bg-card px-2 py-0.5 text-right font-semibold"
-                    value={taxRate}
-                    onChange={(e) => setTaxRate(e.target.value)}
-                  />
+
+                <div className="flex items-center justify-between gap-2 border-t border-border pt-2">
+                  <span className="text-muted-foreground">GST:</span>
+                  <select
+                    className="w-40 rounded border border-input bg-card px-2 py-0.5 text-right font-semibold"
+                    value={gstMode === "NONE" ? "NONE" : "YES"}
+                    onChange={(e) => setGstMode(e.target.value === "NONE" ? "NONE" : "EXCLUSIVE")}
+                  >
+                    <option value="NONE">Without GST</option>
+                    <option value="YES">With GST</option>
+                  </select>
                 </div>
+
+                {gstMode !== "NONE" && (
+                  <>
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-muted-foreground">GST Type:</span>
+                      <select
+                        className="w-40 rounded border border-input bg-card px-2 py-0.5 text-right font-semibold"
+                        value={gstMode}
+                        onChange={(e) => setGstMode(e.target.value)}
+                      >
+                        <option value="EXCLUSIVE">Exclusive</option>
+                        <option value="INCLUSIVE">Inclusive</option>
+                      </select>
+                    </div>
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-muted-foreground">GST Rate (%):</span>
+                      <input
+                        type="number"
+                        min="0"
+                        max="28"
+                        className="w-24 rounded border border-input bg-card px-2 py-0.5 text-right font-semibold"
+                        value={taxRate}
+                        onChange={(e) => setTaxRate(e.target.value)}
+                      />
+                    </div>
+                    {gstMode === "INCLUSIVE" && (
+                      <div className="flex justify-between text-muted-foreground">
+                        <span>Taxable Value:</span>
+                        <span>{currency(taxableAmount)}</span>
+                      </div>
+                    )}
+                    <div className="flex justify-between text-muted-foreground">
+                      <span>
+                        CGST @{cgstRate}% {gstMode === "INCLUSIVE" ? "(Incl.)" : ""}:
+                      </span>
+                      <span>{currency(cgstAmount)}</span>
+                    </div>
+                    <div className="flex justify-between text-muted-foreground">
+                      <span>
+                        SGST @{sgstRate}% {gstMode === "INCLUSIVE" ? "(Incl.)" : ""}:
+                      </span>
+                      <span>{currency(sgstAmount)}</span>
+                    </div>
+                  </>
+                )}
+
+                {gstMode === "NONE" && (
+                  <div className="text-muted-foreground italic">GST not applicable on this quotation.</div>
+                )}
+
                 <div className="flex justify-between border-t border-border pt-1.5 font-bold text-sm text-primary">
                   <span>Grand Total:</span>
                   <span>{currency(grandTotal)}</span>
@@ -905,6 +990,8 @@ export default function Quotations() {
   const [activeQuotation, setActiveQuotation] = useState(null);
   const [query, setQuery] = useState("");
   const [sendingId, setSendingId] = useState(null);
+  const [convertingId, setConvertingId] = useState(null);
+  const [deletingId, setDeletingId] = useState(null);
   const [feedback, setFeedback] = useState(null);
 
   useEffect(() => {
@@ -940,25 +1027,60 @@ export default function Quotations() {
     }
   };
 
-  const handleSendEmail = async (q) => {
+  const handleShare = async (q) => {
     setSendingId(q.id);
     setFeedback(null);
     try {
-      const targetEmail = q.customer_email || q.client_details?.email;
-      if (!targetEmail) {
-        throw new Error("No recipient email found for this quotation. Please edit the quotation and add an email.");
-      }
-      const doc = buildDynamicQuotationPdf(q);
-      const pdfBase64 = doc.output("datauristring");
-      await crud.quotations.sendEmail(q.id, {
-        pdf_base64: pdfBase64,
-        recipient_email: targetEmail
-      });
-      setFeedback({ type: "success", message: `Quotation sent successfully to ${targetEmail}!` });
+      await shareQuotationPdf(q);
+      setFeedback({ type: "success", message: `Quotation PDF #${q.quotation_number} shared.` });
     } catch (err) {
-      setFeedback({ type: "error", message: err.message || "Failed to send quotation email" });
+      setFeedback({ type: "error", message: err.message || "Failed to share quotation PDF" });
     } finally {
       setSendingId(null);
+    }
+  };
+
+  // Accept a quotation and convert it into an invoice (creates/reuses the
+  // customer record behind the scenes and generates a Sales invoice linked
+  // back to this quotation).
+  const handleConvertToInvoice = async (q) => {
+    if (q.is_invoice) {
+      setFeedback({ type: "success", message: `Already converted to invoice #${q.invoice_number}.` });
+      return;
+    }
+    if (!window.confirm(`Mark quotation #${q.quotation_number} as accepted and generate an invoice for it?`)) {
+      return;
+    }
+    setConvertingId(q.id);
+    setFeedback(null);
+    try {
+      const res = await crud.sales.convertQuotation(q.id);
+      const invoiceNumber = res?.data?.sale?.invoice_number || res?.data?.quotation?.invoice_number;
+      setFeedback({
+        type: "success",
+        message: invoiceNumber
+          ? `Quotation accepted — Invoice #${invoiceNumber} created.`
+          : "Quotation accepted and converted to invoice."
+      });
+      window.location.reload();
+    } catch (err) {
+      setFeedback({ type: "error", message: err.message || "Failed to convert quotation to invoice" });
+    } finally {
+      setConvertingId(null);
+    }
+  };
+
+  const handleDelete = async (q) => {
+    if (!window.confirm(`Delete quotation #${q.quotation_number}? This cannot be undone.`)) return;
+    setDeletingId(q.id);
+    setFeedback(null);
+    try {
+      await crud.quotations.remove(q.id);
+      setFeedback({ type: "success", message: `Quotation #${q.quotation_number} deleted.` });
+    } catch (err) {
+      setFeedback({ type: "error", message: err.message || "Failed to delete quotation" });
+    } finally {
+      setDeletingId(null);
     }
   };
 
@@ -1060,12 +1182,27 @@ export default function Quotations() {
                   })}
                 </Td>
                 <Td>
-                  <Chip
-                    tone={q.status === "SENT" ? "success" : q.status === "READY" ? "info" : "default"}
-                    dot
-                  >
-                    {q.status || "DRAFT"}
-                  </Chip>
+                  <div className="flex flex-col gap-1">
+                    <Chip
+                      tone={
+                        q.status === "ACCEPTED"
+                          ? "success"
+                          : q.status === "SENT"
+                          ? "success"
+                          : q.status === "READY"
+                          ? "info"
+                          : "default"
+                      }
+                      dot
+                    >
+                      {q.status || "DRAFT"}
+                    </Chip>
+                    {q.is_invoice && (
+                      <span className="text-[10px] font-semibold text-emerald-600">
+                        Invoice #{q.invoice_number}
+                      </span>
+                    )}
+                  </div>
                 </Td>
                 <Td className="text-right">
                   <div className="inline-flex items-center gap-1.5">
@@ -1077,12 +1214,20 @@ export default function Quotations() {
                       <Download className="size-3.5" />
                     </button>
                     <button
-                      onClick={() => handleSendEmail(q)}
+                      onClick={() => handleShare(q)}
                       disabled={sendingId === q.id}
-                      title="Send Quotation via Email"
+                      title="Share Quotation PDF"
                       className="p-1.5 rounded-lg border border-border bg-card text-foreground hover:bg-muted transition-colors disabled:opacity-50"
                     >
-                      <Send className="size-3.5" />
+                      <Share2 className="size-3.5" />
+                    </button>
+                    <button
+                      onClick={() => handleConvertToInvoice(q)}
+                      disabled={convertingId === q.id || q.is_invoice}
+                      title={q.is_invoice ? `Already invoiced (#${q.invoice_number})` : "Accept & Convert to Invoice"}
+                      className="p-1.5 rounded-lg border border-border bg-card text-foreground hover:bg-muted transition-colors disabled:opacity-50"
+                    >
+                      <FileCheck className="size-3.5" />
                     </button>
                     <button
                       onClick={() => {
@@ -1093,6 +1238,14 @@ export default function Quotations() {
                       className="p-1.5 rounded-lg border border-border bg-card text-foreground hover:bg-muted transition-colors"
                     >
                       <Edit className="size-3.5" />
+                    </button>
+                    <button
+                      onClick={() => handleDelete(q)}
+                      disabled={deletingId === q.id}
+                      title="Delete Quotation"
+                      className="p-1.5 rounded-lg border border-border bg-card text-destructive hover:bg-destructive/10 transition-colors disabled:opacity-50"
+                    >
+                      <Trash2 className="size-3.5" />
                     </button>
                   </div>
                 </Td>
@@ -1110,7 +1263,6 @@ export default function Quotations() {
         onClose={() => setModalOpen(false)}
         onSaved={() => {
           if (leadId) window.history.replaceState({}, "", "/quotations");
-          window.location.reload();
         }}
       />
     </AppShell>
