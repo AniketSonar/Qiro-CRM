@@ -1,4 +1,4 @@
-﻿const pool = require("../config/db");
+const pool = require("../config/db");
 const nodemailer = require("nodemailer");
 const { computeGstBreakdown } = require("../utils/gst");
 
@@ -274,6 +274,11 @@ const createQuotation = async (req, res) => {
             breakdown.gst_mode
         ]);
 
+        await pool.query(
+            `UPDATE leads SET amount = $1, updated_at = NOW() WHERE id = $2`,
+            [grandTotal, lead_id]
+        );
+
         return res.status(201).json({
             success: true,
             message: "Quotation created successfully",
@@ -400,6 +405,11 @@ const updateQuotation = async (req, res) => {
             id
         ]);
 
+        await pool.query(
+            `UPDATE leads SET amount = $1, updated_at = NOW() WHERE id = $2`,
+            [grandTotal, existing.lead_id]
+        );
+
         return res.status(200).json({
             success: true,
             message: "Quotation updated successfully",
@@ -407,6 +417,39 @@ const updateQuotation = async (req, res) => {
         });
     } catch (error) {
         console.error("updateQuotation error:", error);
+        return res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+/**
+ * PATCH /api/quotations/:id/accept
+ * Marks a quotation as ACCEPTED. Accepted quotations show up in the
+ * Invoices tab, where they can be turned into an invoice.
+ */
+const acceptQuotation = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const result = await pool.query(
+            `UPDATE quotations
+             SET status = 'ACCEPTED', accepted_at = COALESCE(accepted_at, NOW()), updated_at = NOW()
+             WHERE id = $1
+             RETURNING *`,
+            [id]
+        );
+        if (result.rows.length === 0) {
+            return res.status(404).json({ success: false, message: "Quotation not found" });
+        }
+        await pool.query(
+            `UPDATE leads SET amount = $1, updated_at = NOW() WHERE id = $2`,
+            [result.rows[0].total_amount, result.rows[0].lead_id]
+        );
+        return res.status(200).json({
+            success: true,
+            message: "Quotation accepted. It is now available in the Invoices tab.",
+            data: result.rows[0]
+        });
+    } catch (error) {
+        console.error("acceptQuotation error:", error);
         return res.status(500).json({ success: false, message: error.message });
     }
 };
@@ -507,5 +550,6 @@ module.exports = {
     createQuotation,
     updateQuotation,
     deleteQuotation,
+    acceptQuotation,
     sendQuotationEmail
 };

@@ -993,10 +993,11 @@ export function buildInvoicePdf(sale, customerName = null, options = {}) {
       && originalBalanceDue > 0
   );
   const finalAmount = balanceOnly ? originalBalanceDue : fullFinalAmount;
-  const amountPaid = balanceOnly ? 0 : originalAmountPaid;
   const balanceDue = originalBalanceDue;
   const dealTitle = raw.quotation_type || raw.quotation_subject || raw.product_service || raw.deal_title || "Professional Services";
-  const dealAmount = Number(raw.deal_amount ?? finalAmount);
+  // The invoice total is the authoritative project value. The joined deal
+  // amount can be stale when the quotation was accepted before GST was added.
+  const dealAmount = fullFinalAmount;
 
   // Client details from lead join
   const clientName = customerName
@@ -1366,10 +1367,6 @@ export function buildInvoicePdf(sale, customerName = null, options = {}) {
   }
   by += 13;
   doc.setTextColor(30, 30, 30);
-  doc.text("Amount Paid :", M + 8, by);
-  doc.setFont("times", "normal");
-  doc.text(inr(amountPaid), M + 90, by);
-  by += 13;
   doc.setFont("times", "bold");
   doc.text("Balance Due :", M + 8, by);
   doc.setFont("times", "normal");

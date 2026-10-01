@@ -35,6 +35,7 @@ import {
   COMPANY_DETAILS,
   BANK_DETAILS
 } from "../lib/quotation";
+import { downloadProformaPdf } from "../lib/proforma";
 
 const QUOTATION_TYPES = [
   "Website Quotation",
@@ -1027,6 +1028,15 @@ export default function Quotations() {
     }
   };
 
+  const handleProforma = (q) => {
+    try {
+      downloadProformaPdf(q);
+      setFeedback({ type: "success", message: `Proforma invoice for quotation #${q.quotation_number} downloaded.` });
+    } catch (err) {
+      setFeedback({ type: "error", message: err.message || "Failed to download proforma invoice" });
+    }
+  };
+
   const handleShare = async (q) => {
     setSendingId(q.id);
     setFeedback(null);
@@ -1040,31 +1050,23 @@ export default function Quotations() {
     }
   };
 
-  // Accept a quotation and convert it into an invoice (creates/reuses the
-  // customer record behind the scenes and generates a Sales invoice linked
-  // back to this quotation).
-  const handleConvertToInvoice = async (q) => {
-    if (q.is_invoice) {
-      setFeedback({ type: "success", message: `Already converted to invoice #${q.invoice_number}.` });
+  // Mark a quotation as accepted. Accepted quotations move to the Invoices
+  // tab, where the invoice is created (and the quotation is then deleted).
+  const handleAccept = async (q) => {
+    if (String(q.status).toUpperCase() === "ACCEPTED") {
+      setFeedback({ type: "success", message: `Quotation #${q.quotation_number} is already accepted. Create its invoice from the Invoices tab.` });
       return;
     }
-    if (!window.confirm(`Mark quotation #${q.quotation_number} as accepted and generate an invoice for it?`)) {
+    if (!window.confirm(`Mark quotation #${q.quotation_number} as accepted? It will then appear in the Invoices tab.`)) {
       return;
     }
     setConvertingId(q.id);
     setFeedback(null);
     try {
-      const res = await crud.sales.convertQuotation(q.id);
-      const invoiceNumber = res?.data?.sale?.invoice_number || res?.data?.quotation?.invoice_number;
-      setFeedback({
-        type: "success",
-        message: invoiceNumber
-          ? `Quotation accepted — Invoice #${invoiceNumber} created.`
-          : "Quotation accepted and converted to invoice."
-      });
-      window.location.reload();
+      await crud.quotations.accept(q.id);
+      setFeedback({ type: "success", message: `Quotation #${q.quotation_number} accepted. Create the invoice from the Invoices tab.` });
     } catch (err) {
-      setFeedback({ type: "error", message: err.message || "Failed to convert quotation to invoice" });
+      setFeedback({ type: "error", message: err.message || "Failed to accept quotation" });
     } finally {
       setConvertingId(null);
     }
@@ -1197,9 +1199,9 @@ export default function Quotations() {
                     >
                       {q.status || "DRAFT"}
                     </Chip>
-                    {q.is_invoice && (
+                    {q.status === "ACCEPTED" && (
                       <span className="text-[10px] font-semibold text-emerald-600">
-                        Invoice #{q.invoice_number}
+                        Ready in Invoices tab
                       </span>
                     )}
                   </div>
@@ -1214,6 +1216,13 @@ export default function Quotations() {
                       <Download className="size-3.5" />
                     </button>
                     <button
+                      onClick={() => handleProforma(q)}
+                      title="Download Proforma Invoice"
+                      className="p-1.5 rounded-lg border border-border bg-card text-foreground hover:bg-muted transition-colors"
+                    >
+                      <FileText className="size-3.5" />
+                    </button>
+                    <button
                       onClick={() => handleShare(q)}
                       disabled={sendingId === q.id}
                       title="Share Quotation PDF"
@@ -1222,9 +1231,9 @@ export default function Quotations() {
                       <Share2 className="size-3.5" />
                     </button>
                     <button
-                      onClick={() => handleConvertToInvoice(q)}
-                      disabled={convertingId === q.id || q.is_invoice}
-                      title={q.is_invoice ? `Already invoiced (#${q.invoice_number})` : "Accept & Convert to Invoice"}
+                      onClick={() => handleAccept(q)}
+                      disabled={convertingId === q.id || q.status === "ACCEPTED"}
+                      title={q.status === "ACCEPTED" ? "Accepted — create the invoice from the Invoices tab" : "Mark as Accepted"}
                       className="p-1.5 rounded-lg border border-border bg-card text-foreground hover:bg-muted transition-colors disabled:opacity-50"
                     >
                       <FileCheck className="size-3.5" />

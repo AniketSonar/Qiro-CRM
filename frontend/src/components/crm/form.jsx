@@ -211,29 +211,59 @@ export function ConfirmModal({ open, title, message, confirmLabel = "Delete", on
 
 export function RowMenu({ items }) {
   const [open, setOpen] = useState(false);
+  const [menuPosition, setMenuPosition] = useState({ top: 0, left: 0 });
   const ref = useRef(null);
+  const buttonRef = useRef(null);
+  const menuRef = useRef(null);
+
+  const updateMenuPosition = () => {
+    if (!buttonRef.current) return;
+    const rect = buttonRef.current.getBoundingClientRect();
+    const menuWidth = 192;
+    const menuHeight = menuRef.current?.getBoundingClientRect().height ?? Math.min(items.filter(Boolean).length * 44 + 8, window.innerHeight - 16);
+    const openUp = rect.bottom + menuHeight > window.innerHeight - 8 && rect.top - menuHeight >= 8;
+    setMenuPosition({
+      top: openUp ? rect.top - menuHeight - 4 : rect.bottom + 4,
+      left: Math.max(8, Math.min(rect.right - menuWidth, window.innerWidth - menuWidth - 8))
+    });
+  };
 
   useEffect(() => {
     if (!open) return undefined;
+    updateMenuPosition();
     const onDoc = (e) => {
       if (ref.current && !ref.current.contains(e.target)) setOpen(false);
     };
     document.addEventListener("mousedown", onDoc);
-    return () => document.removeEventListener("mousedown", onDoc);
+    window.addEventListener("resize", updateMenuPosition);
+    window.addEventListener("scroll", updateMenuPosition, true);
+    return () => {
+      document.removeEventListener("mousedown", onDoc);
+      window.removeEventListener("resize", updateMenuPosition);
+      window.removeEventListener("scroll", updateMenuPosition, true);
+    };
   }, [open]);
 
   return (
     <div ref={ref} className="relative inline-block text-left">
       <button
+        ref={buttonRef}
         type="button"
-        onClick={() => setOpen((v) => !v)}
+        onClick={() => {
+          updateMenuPosition();
+          setOpen((v) => !v);
+        }}
         className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
         aria-label="Row actions"
       >
         <MoreHorizontal className="size-4" />
       </button>
       {open ? (
-        <div className="panel absolute right-0 z-30 mt-1 w-48 overflow-hidden bg-card p-1 text-left shadow-float">
+        <div
+          ref={menuRef}
+          className="panel fixed z-50 w-48 overflow-hidden bg-card p-1 text-left shadow-float"
+          style={menuPosition}
+        >
           {items
             .filter(Boolean)
             .map((item) => (

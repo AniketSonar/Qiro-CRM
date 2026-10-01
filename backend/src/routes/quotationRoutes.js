@@ -1,10 +1,11 @@
-﻿const express = require("express");
+const express = require("express");
 const {
     getQuotations,
     getQuotationById,
     createQuotation,
     updateQuotation,
     deleteQuotation,
+    acceptQuotation,
     sendQuotationEmail
 } = require("../controllers/quotationController");
 
@@ -46,6 +47,13 @@ router.delete(
     authenticate,
     authorize("ADMIN", "SALES_MANAGER"),
     deleteQuotation
+);
+
+router.patch(
+    "/:id/accept",
+    authenticate,
+    authorize("ADMIN", "SALES_MANAGER", "SALES_PERSON"),
+    acceptQuotation
 );
 
 router.post(

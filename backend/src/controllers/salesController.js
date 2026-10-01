@@ -657,17 +657,6 @@ const deleteSale = async (req, res) => {
             return res.status(403).json({ success: false, message: "You can only delete your assigned invoices" });
         }
 
-        if (sale.quotation_id) {
-            await client.query(
-                `UPDATE quotations
-                 SET status = 'DRAFT', is_invoice = false, invoice_number = NULL,
-                     invoice_date = NULL, accepted_at = NULL, converted_sale_id = NULL,
-                     updated_at = NOW()
-                 WHERE id = $1 AND converted_sale_id = $2`,
-                [sale.quotation_id, sale.id]
-            );
-        }
-
         await client.query(`DELETE FROM sales WHERE id = $1`, [id]);
         await client.query("COMMIT");
 
@@ -914,7 +903,7 @@ const updateSale = async (req, res) => {
         try {
             payment = resolvePayment(
                 finalAmount,
-                payment_status || sale.payment_status,
+                payment_status || (amount_paid !== undefined ? "PARTIAL" : sale.payment_status),
                 amount_paid !== undefined ? amount_paid : sale.amount_paid
             );
         } catch (error) {
@@ -1066,18 +1055,11 @@ const convertQuotationToInvoice = async (req, res) => {
 
         const quotation = qRes.rows[0];
 
-        // Idempotent — if this quotation was already converted, just return
-        // the existing invoice instead of creating a duplicate one.
-        if (quotation.converted_sale_id) {
-            const existingSale = await client.query(
-                `SELECT * FROM sales WHERE id = $1`,
-                [quotation.converted_sale_id]
-            );
+        if (String(quotation.status || "").toUpperCase() !== "ACCEPTED") {
             await client.query("ROLLBACK");
-            return res.status(200).json({
-                success: true,
-                message: "This quotation has already been converted to an invoice",
-                data: { sale: existingSale.rows[0] || null, quotation }
+            return res.status(400).json({
+                success: false,
+                message: "Only accepted quotations can be converted to an invoice."
             });
         }
 
@@ -1154,6 +1136,16 @@ const convertQuotationToInvoice = async (req, res) => {
             gstRate
         );
 
+        // Keep the linked deal value aligned with the invoice total, including GST.
+        await client.query(
+            `UPDATE deals SET amount = $1, updated_at = NOW() WHERE id = $2`,
+            [breakdown.grand_total, customer.deal_id]
+        );
+        await client.query(
+            `UPDATE leads SET amount = $1, updated_at = NOW() WHERE id = $2`,
+            [breakdown.grand_total, quotation.lead_id]
+        );
+
         const finalInvoiceNumber = generateInvoiceNumber();
 
         let payment;
@@ -1173,16 +1165,16 @@ const convertQuotationToInvoice = async (req, res) => {
                 customer_id, deal_id, assigned_to, invoice_number,
                 product_service, description, sale_amount, discount, tax, final_amount,
                 payment_status, amount_paid, balance_due, payment_method, sale_date, notes,
-                gst_mode, gst_rate, cgst_amount, sgst_amount, quotation_id
+                gst_mode, gst_rate, cgst_amount, sgst_amount
             ) VALUES (
-                $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21
+                $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20
             ) RETURNING *`,
             [
                 customer.id,
                 customer.deal_id,
                 quotation.assigned_to || req.user.id,
                 finalInvoiceNumber,
-                quotation.subject || quotation.product_service || quotation.quotation_type,
+                quotation.subject || quotation.product_service || quotation.quotation_type || "Invoice",
                 quotation.description || null,
                 breakdown.taxable_amount,
                 Number(quotation.discount || 0),
@@ -1197,36 +1189,22 @@ const convertQuotationToInvoice = async (req, res) => {
                 breakdown.gst_mode,
                 gstRate,
                 breakdown.cgst_amount,
-                breakdown.sgst_amount,
-                quotation.id
+                breakdown.sgst_amount
             ]
         );
 
         const sale = saleInsert.rows[0];
 
-        const updatedQuotationRes = await client.query(
-            `UPDATE quotations
-             SET status = 'ACCEPTED',
-                 is_invoice = true,
-                 invoice_number = $1,
-                 invoice_date = NOW(),
-                 accepted_at = NOW(),
-                 converted_sale_id = $2,
-                 updated_at = NOW()
-             WHERE id = $3
-             RETURNING *`,
-            [finalInvoiceNumber, sale.id, quotation.id]
-        );
+        // The quotation has served its purpose — remove it now that the
+        // invoice exists. The invoice keeps its own copy of every figure.
+        await client.query(`DELETE FROM quotations WHERE id = $1`, [quotation.id]);
 
         await client.query("COMMIT");
 
         return res.status(201).json({
             success: true,
-            message: "Quotation accepted and converted to invoice successfully",
-            data: {
-                sale,
-                quotation: updatedQuotationRes.rows[0]
-            }
+            message: "Invoice created and the quotation was removed",
+            data: { sale }
         });
     } catch (error) {
         await client.query("ROLLBACK");

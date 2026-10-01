@@ -258,7 +258,13 @@ const mapUsers = (res) =>
 const mapSales = (res) =>
   (res?.data?.sales ?? []).map((s) => ({
     id: s.invoice_number || `INV-${s.id}`,
-    customer: s.deal_title || s.customer_code || "—",
+    customer:
+      fullName(s.lead_first_name, s.lead_last_name) ||
+      s.lead_company ||
+      s.deal_title ||
+      s.customer_code ||
+      "—",
+    company: s.lead_company || "",
     amount: num(s.final_amount ?? s.sale_amount),
     amountPaid: num(s.amount_paid),
     balanceDue: num(s.balance_due ?? Math.max(Number(s.final_amount ?? 0) - Number(s.amount_paid ?? 0), 0)),
@@ -293,7 +299,7 @@ export const useContacts = () => useApi("/contacts?limit=100", mapContacts, demo
 export const useFollowUps = () => useApi("/follow-ups?limit=100", mapFollowUps, demo.followUps);
 export const useActivities = () => useApi("/activities", mapActivities, demo.activities);
 export const useUsers = () => useApi("/users?limit=100", mapUsers, demo.users);
-export const useSales = () => useApi("/sales?limit=100", mapSales, demo.salesRows);
+export const useSales = () => useApi("/sales?limit=100", mapSales, []);
 export const useNotifications = () =>
   useApi("/notifications", mapNotifications, demo.notifications);
 export const useSalaries = () => useApi("/salaries", (res) => res?.data ?? [], []);
@@ -613,7 +619,7 @@ export const crud = {
     create: (body) => run(api.post("/sales", body)),
     update: (id, body) => run(api.put(`/sales/${id}`, body)),
     remove: (id) => run(api.del(`/sales/${id}`)),
-    convertQuotation: (id) => run(api.post(`/sales/from-quotation/${id}`, {}))
+    convertQuotation: (id, body) => run(api.post(`/sales/from-quotation/${id}`, body ?? {}))
   },
   users: {
     create: (body) => run(api.post("/users", body)),
@@ -629,6 +635,7 @@ export const crud = {
     create: (body) => run(api.post("/quotations", body)),
     update: (id, body) => run(api.put(`/quotations/${id}`, body)),
     remove: (id) => run(api.del(`/quotations/${id}`)),
+    accept: (id) => run(api.patch(`/quotations/${id}/accept`, {})),
     sendEmail: (id, body) => run(api.post(`/quotations/${id}/send-email`, body))
   },
   notifications: {

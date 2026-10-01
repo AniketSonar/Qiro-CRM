@@ -12,7 +12,7 @@ import {
   Building2,
   Users2,
   CalendarCheck2,
-  CircleDollarSign,
+  Receipt,
   BarChart3,
   ShieldCheck,
   Award,
@@ -45,7 +45,8 @@ const navGroups = [
       { to: "/follow-ups", label: "Follow up", icon: Clock, step: "2", badgeKey: "followUps" },
       { to: "/deals", label: "Develop deals", icon: BadgePercent, step: "3" },
       { to: "/quotations", label: "Quotations", icon: FileText, step: "4" },
-      { to: "/customers", label: "Convert customers", icon: Building2, step: "5" }
+      { to: "/invoices", label: "Invoices", icon: Receipt, step: "5" },
+      { to: "/customers", label: "Convert customers", icon: Building2, step: "6" }
     ]
   },
   {
@@ -53,7 +54,6 @@ const navGroups = [
     items: [
       { to: "/contacts", label: "Contacts", icon: Users2 },
       { to: "/activities", label: "Activities", icon: CalendarCheck2 },
-      { to: "/sales", label: "Sales", icon: CircleDollarSign },
       { to: "/compensation", label: "Compensation & Targets", icon: Award },
       { to: "/reports", label: "Reports", icon: BarChart3 }
     ]

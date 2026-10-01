@@ -1,4 +1,4 @@
-import { Routes, Route, useLocation } from "react-router-dom";
+import { Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { useEffect } from "react";
 import Dashboard from "./pages/Dashboard";
 import Leads from "./pages/Leads";
@@ -9,7 +9,7 @@ import Deals from "./pages/Deals";
 import Customers from "./pages/Customers";
 import Contacts from "./pages/Contacts";
 import Activities from "./pages/Activities";
-import Sales from "./pages/Sales";
+import Invoices from "./pages/Invoices";
 import Reports from "./pages/Reports";
 import Users from "./pages/Users";
 import LeaveManagement from "./pages/LeaveManagement";
@@ -32,7 +32,7 @@ const TITLES = {
   "/customers": "Customers — Qiro CRM",
   "/contacts": "Contacts — Qiro CRM",
   "/activities": "Activity log — Qiro CRM",
-  "/sales": "Sales & invoices — Qiro CRM",
+  "/invoices": "Invoices — Qiro CRM",
   "/compensation": "Compensation & Targets — Qiro CRM",
   "/reports": "Reports — Qiro CRM",
   "/users": "Users & roles — Qiro CRM",
@@ -67,7 +67,8 @@ export default function App() {
         <Route path="/customers" element={<RequireAuth><Customers /></RequireAuth>} />
         <Route path="/contacts" element={<RequireAuth><Contacts /></RequireAuth>} />
         <Route path="/activities" element={<RequireAuth><Activities /></RequireAuth>} />
-        <Route path="/sales" element={<RequireAuth><Sales /></RequireAuth>} />
+        <Route path="/invoices" element={<RequireAuth><Invoices /></RequireAuth>} />
+        <Route path="/sales" element={<Navigate to="/invoices" replace />} />
         <Route path="/compensation" element={<RequireAuth><Compensation /></RequireAuth>} />
         <Route path="/reports" element={<RequireAuth><Reports /></RequireAuth>} />
         <Route path="/users" element={<RequireAuth><RequireAdmin><Users /></RequireAdmin></RequireAuth>} />
