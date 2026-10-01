@@ -104,7 +104,7 @@ export function buildProformaPdf(quotation, options = {}) {
       ["Account Number", PROFORMA_BANK.accountNumber],
       ["IFSC Code", PROFORMA_BANK.ifsc]
     ],
-    footerText: `Qiro Tech Innovation Pvt. Ltd. | GST No: ${QIRO_COMPANY.gstin} | Hinjawadi, Pune – 411057`
+    footerText: `Qiro Tech Innovation Pvt. Ltd.`
   });
 }
 

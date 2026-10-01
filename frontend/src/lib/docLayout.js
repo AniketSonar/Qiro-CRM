@@ -9,7 +9,7 @@ import { QIRO_LOGO_BASE64 } from "./qiroLogo.js";
 /* and a dedicated SIGN & STAMP area (as in Qiro's reference PDF).     */
 /* ------------------------------------------------------------------ */
 
-const ACCENT = [184, 98, 20];
+const ACCENT = [5, 92, 121];
 const DARK = [40, 40, 40];
 const GREY = [110, 110, 110];
 const ROW_BG = [244, 244, 244];
