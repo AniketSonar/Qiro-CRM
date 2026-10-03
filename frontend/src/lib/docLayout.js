@@ -235,13 +235,14 @@ export function renderDocument(spec) {
   y += 18;
 
   // ─── Closing block (as in the reference PDF) ───
-  // Bank details on top; below them a signing row: Regards / name / number on
-  // the LEFT, company name / GST / address on the RIGHT (right-aligned), and
-  // the SIGN & STAMP space left open between the two.
-  const closingH = 24 + spec.bank.length * 13.5 + 128;
+  // Bank details on top; below them a signing row with the signer and company
+  // details on the left, leaving the SIGN & STAMP space open on the right.
+  const bankH = 15 + spec.bank.reduce((height, [, value]) => {
+    const lines = doc.splitTextToSize(String(value), 300).length;
+    return height + 11.5 * lines + 1.5;
+  }, 0);
+  const closingH = bankH + 16 + 34 + 11 + 12 + 12 + 12;
   if (y + closingH > H - 48) newPage();
-  const rx = W - M; // right edge
-
   // Bank details
   let ly = y;
   setText("bold", 9.5, ACCENT);
@@ -266,24 +267,11 @@ export function renderDocument(spec) {
   ny += 34;
   doc.text(QIRO_SIGNATORY.name, M, ny);
   ny += 11;
+  setText("bold", 9, DARK);
+  doc.text(QIRO_COMPANY.legalName, M, ny);
+  ny += 12;
   setText("normal", 8.5, DARK);
   doc.text(QIRO_SIGNATORY.phone, M, ny);
-
-  // Right — company name, GST, address (right-aligned)
-  let cy = rowTop;
-  setText("bold", 9, DARK);
-  doc.text(QIRO_COMPANY.legalName, rx, cy, { align: "right" });
-  cy += 12;
-  setText("normal", 8.5, DARK);
-  doc.text(`GST Number: ${QIRO_COMPANY.gstin}`, rx, cy, { align: "right" });
-  cy += 52; // open gap after the GST number for the company stamp
-  setText("normal", 7.5, GREY);
-  QIRO_COMPANY.footerAddress.forEach((l) => {
-    doc.text(l, rx, cy, { align: "right" });
-    cy += 9.5;
-  });
-
-  // Space between the left and right text is intentionally left blank for signature & stamp.
 
   // ─── Footer on every page ───
   const pages = doc.getNumberOfPages();

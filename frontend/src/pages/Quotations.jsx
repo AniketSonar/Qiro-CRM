@@ -36,6 +36,7 @@ import {
   BANK_DETAILS
 } from "../lib/quotation";
 import { downloadProformaPdf } from "../lib/proforma";
+import ProformaModal from "../components/crm/ProformaModal";
 
 const QUOTATION_TYPES = [
   "Website Quotation",
@@ -991,6 +992,7 @@ export default function Quotations() {
   const [activeQuotation, setActiveQuotation] = useState(null);
   const [query, setQuery] = useState("");
   const [sendingId, setSendingId] = useState(null);
+  const [proformaFor, setProformaFor] = useState(null);
   const [convertingId, setConvertingId] = useState(null);
   const [deletingId, setDeletingId] = useState(null);
   const [feedback, setFeedback] = useState(null);
@@ -1028,10 +1030,10 @@ export default function Quotations() {
     }
   };
 
-  const handleProforma = (q) => {
+  const handleProforma = (q, percent) => {
     try {
-      downloadProformaPdf(q);
-      setFeedback({ type: "success", message: `Proforma invoice for quotation #${q.quotation_number} downloaded.` });
+      downloadProformaPdf(q, { percent });
+      setFeedback({ type: "success", message: `Proforma invoice (${percent}%) for quotation #${q.quotation_number} downloaded.` });
     } catch (err) {
       setFeedback({ type: "error", message: err.message || "Failed to download proforma invoice" });
     }
@@ -1216,7 +1218,7 @@ export default function Quotations() {
                       <Download className="size-3.5" />
                     </button>
                     <button
-                      onClick={() => handleProforma(q)}
+                      onClick={() => setProformaFor(q)}
                       title="Download Proforma Invoice"
                       className="p-1.5 rounded-lg border border-border bg-card text-foreground hover:bg-muted transition-colors"
                     >
@@ -1273,6 +1275,11 @@ export default function Quotations() {
         onSaved={() => {
           if (leadId) window.history.replaceState({}, "", "/quotations");
         }}
+      />
+      <ProformaModal
+        quotation={proformaFor}
+        onClose={() => setProformaFor(null)}
+        onConfirm={(percent) => handleProforma(proformaFor, percent)}
       />
     </AppShell>
   );

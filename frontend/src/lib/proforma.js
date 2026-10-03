@@ -34,8 +34,16 @@ export function buildProformaPdf(quotation, options = {}) {
   const project =
     raw.product_service ||
     (raw.quotation_type ? raw.quotation_type.replace(" Quotation", "") + " Services" : "Digital Marketing Services");
-  const paymentTitle = options.paymentTitle || "100% Monthly Payment";
-  const paymentNote = options.paymentNote || "As per agreed digital marketing service cycle";
+  // Share of the total this proforma bills for (e.g. 30 / 50 / 100).
+  const percent = Math.min(Math.max(Number(options.percent) || 100, 1), 100);
+  const isPartial = percent < 100;
+  const paymentTitle =
+    options.paymentTitle || (isPartial ? `${percent}% Advance Payment` : "100% Monthly Payment");
+  const paymentNote =
+    options.paymentNote ||
+    (isPartial
+      ? `Balance ${100 - percent}% payable as per agreed milestones`
+      : "As per agreed digital marketing service cycle");
 
   // ---- amounts ----
   const subtotal = Number(pricing.subtotal ?? raw.subtotal ?? raw.total_amount ?? 0);
@@ -65,6 +73,8 @@ export function buildProformaPdf(quotation, options = {}) {
         }
       ];
 
+  const payable = Math.round(((grand * percent) / 100) * 100) / 100;
+
   const totals = [{ label: "Sub Total", value: money(subtotal) }];
   if (discount > 0) totals.push({ label: "Discount", value: `- ${money(discount)}` });
   totals.push({
@@ -77,6 +87,7 @@ export function buildProformaPdf(quotation, options = {}) {
     meta: [
       ["Proforma No", piNo],
       ["Date", fmtLong(piDate)],
+      ["GST Number", QIRO_COMPANY.gstin],
       ["Project", project],
       ["Terms", paymentTitle]
     ],
@@ -94,8 +105,11 @@ export function buildProformaPdf(quotation, options = {}) {
       return { description: it.description, sub, qty, rate: Number(it.unit_price ?? amount / qty), amount };
     }),
     totals,
-    total: { label: "Grand Total", value: money(grand) },
-    due: { label: "Balance Due", value: `INR ${money(grand)}` },
+    total: { label: isPartial ? "Total Value" : "Grand Total", value: money(grand) },
+    due: {
+      label: isPartial ? `Amount Payable (${percent}%)` : "Balance Due",
+      value: `INR ${money(payable)}`
+    },
     notes: [],
     terms: { title: "Terms & Conditions", lines: [`Payment Schedule: ${paymentTitle}`, paymentNote] },
     bank: [

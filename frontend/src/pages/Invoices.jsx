@@ -16,6 +16,7 @@ import { currency } from "../lib/crm-data";
 import { crud, useQuotations, useSales } from "../lib/crm-store";
 import { buildDynamicQuotationPdf, downloadInvoicePdf, shareInvoicePdf } from "../lib/quotation";
 import { downloadProformaPdf } from "../lib/proforma";
+import ProformaModal from "../components/crm/ProformaModal";
 
 const PAY_METHOD = ["CASH", "CARD", "UPI", "BANK_TRANSFER", "CHEQUE", "OTHER"];
 const pills = ["All", "Unpaid", "Partially paid", "Fully paid"];
@@ -165,6 +166,7 @@ export default function Invoices() {
   const [pill, setPill] = useState(pills[0]);
   const [query, setQuery] = useState("");
   const [creating, setCreating] = useState(null);
+  const [proforma, setProforma] = useState(null);
   const [paying, setPaying] = useState(null);
   const [feedback, setFeedback] = useState(null);
 
@@ -284,7 +286,7 @@ export default function Invoices() {
                       <button
                         title="Download proforma invoice"
                         aria-label="Download proforma invoice"
-                        onClick={() => downloadProformaPdf(q)}
+                        onClick={() => setProforma(q)}
                         className="rounded-lg border border-border bg-card p-1.5 text-foreground transition-colors hover:bg-muted"
                       >
                         <FileText className="size-3.5" />
@@ -418,6 +420,14 @@ export default function Invoices() {
         quotation={creating}
         onClose={() => setCreating(null)}
         onDone={(msg) => flash("success", msg)}
+      />
+      <ProformaModal
+        quotation={proforma}
+        onClose={() => setProforma(null)}
+        onConfirm={(percent) => {
+          downloadProformaPdf(proforma, { percent });
+          flash("success", `Proforma (${percent}%) for quotation #${proforma.quotation_number} downloaded.`);
+        }}
       />
       <PaymentModal invoice={paying} onClose={() => setPaying(null)} onDone={(msg) => flash("success", msg)} />
     </AppShell>
