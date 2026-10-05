@@ -14,7 +14,6 @@ import {
   Select,
   Textarea,
   formValues,
-  toLocalDateTimeValue,
   toLocalInput
 } from "../components/crm/form";
 import { BulkBar, SelectTd, SelectTh, useSelection } from "../components/crm/bulk";
@@ -44,7 +43,7 @@ export function FollowUpForm({ open, mode, row, lookups, onClose }) {
     ["lead_id", "assigned_to"].forEach((k) => {
       if (body[k]) body[k] = Number(body[k]);
     });
-    if (body.scheduled_at) body.scheduled_at = toLocalDateTimeValue(body.scheduled_at);
+    if (body.scheduled_at) body.scheduled_at = new Date(body.scheduled_at).toISOString();
     if (mode === "edit") await crud.followUps.update(row.id, body);
     else await crud.followUps.create(body);
   };

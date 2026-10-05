@@ -144,4 +144,40 @@ const initSalesGstSchema = async () => {
 
 module.exports.initSalesGstSchema = initSalesGstSchema;
 
+/**
+ * Store scheduled dates as instants so local and deployed databases use the
+ * same timezone semantics. Existing timestamp values are application-local
+ * India times and are converted accordingly.
+ */
+const initTimezoneSchema = async () => {
+    await pool.query(`
+        DO $$
+        BEGIN
+            IF EXISTS (
+                SELECT 1
+                FROM information_schema.columns
+                WHERE table_name = 'follow_ups'
+                  AND column_name = 'scheduled_at'
+                  AND data_type = 'timestamp without time zone'
+            ) THEN
+                ALTER TABLE follow_ups
+                    ALTER COLUMN scheduled_at TYPE TIMESTAMPTZ
+                    USING scheduled_at AT TIME ZONE 'Asia/Kolkata';
+            END IF;
 
+            IF EXISTS (
+                SELECT 1
+                FROM information_schema.columns
+                WHERE table_name = 'activities'
+                  AND column_name = 'activity_at'
+                  AND data_type = 'timestamp without time zone'
+            ) THEN
+                ALTER TABLE activities
+                    ALTER COLUMN activity_at TYPE TIMESTAMPTZ
+                    USING activity_at AT TIME ZONE 'Asia/Kolkata';
+            END IF;
+        END $$;
+    `);
+};
+
+module.exports.initTimezoneSchema = initTimezoneSchema;

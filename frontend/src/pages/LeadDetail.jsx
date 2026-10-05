@@ -36,7 +36,6 @@ import {
   Textarea,
   formValues,
   toDateInput,
-  toLocalDateTimeValue,
   toLocalInput
 } from "../components/crm/form";
 import { currency } from "../lib/crm-data";
@@ -177,7 +176,7 @@ function TouchForm({ open, leadId, kind, row, users, onClose }) {
         const body = formValues(fd);
         body.lead_id = Number(leadId);
         if (body.assigned_to) body.assigned_to = Number(body.assigned_to);
-        if (body.scheduled_at) body.scheduled_at = toLocalDateTimeValue(body.scheduled_at);
+        if (body.scheduled_at) body.scheduled_at = new Date(body.scheduled_at).toISOString();
         if (raw.id) await crud.followUps.update(raw.id, body);
         else await crud.followUps.create(body);
       }}

@@ -3,7 +3,7 @@ const cors = require("cors");
 require("dotenv").config();
 
 const pool = require("./config/db");
-const { initSalarySchema, initQuotationSchema, initSalesGstSchema } = require("./config/db");
+const { initSalarySchema, initQuotationSchema, initSalesGstSchema, initTimezoneSchema } = require("./config/db");
 const authRoutes = require("./routes/authRoutes");
 const userRoutes = require("./routes/userRoutes");
 const dashboardRoutes = require("./routes/dashboardRoutes");
@@ -104,6 +104,7 @@ const PORT = process.env.PORT || 5000;
 initSalarySchema()
     .then(() => initQuotationSchema())
     .then(() => initSalesGstSchema())
+    .then(() => initTimezoneSchema())
     .then(() => {
         app.listen(PORT, () => {
             console.log(`CRM Backend running on port ${PORT}`);

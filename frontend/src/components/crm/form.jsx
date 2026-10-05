@@ -343,19 +343,6 @@ export const toLocalInput = (iso) => {
   )}`;
 };
 
-/** Preserve a datetime-local value while including the browser's timezone offset. */
-export const toLocalDateTimeValue = (value) => {
-  if (!value) return "";
-  const match = String(value).match(/^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2})(?::\d{2})?$/);
-  if (!match) return new Date(value).toISOString();
-  const offset = -new Date(`${match[1]}:00`).getTimezoneOffset();
-  const sign = offset >= 0 ? "+" : "-";
-  const absolute = Math.abs(offset);
-  const hours = String(Math.floor(absolute / 60)).padStart(2, "0");
-  const minutes = String(absolute % 60).padStart(2, "0");
-  return `${match[1]}:00${sign}${hours}:${minutes}`;
-};
-
 export const toDateInput = (iso) => (iso ? String(iso).slice(0, 10) : "");
 
 /** FormData -> plain object, dropping empty strings */
