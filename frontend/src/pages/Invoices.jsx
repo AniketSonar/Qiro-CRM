@@ -15,7 +15,7 @@ import {
 import { currency } from "../lib/crm-data";
 import { crud, useQuotations, useSales } from "../lib/crm-store";
 import { buildDynamicQuotationPdf, downloadInvoicePdf, shareInvoicePdf } from "../lib/quotation";
-import { downloadProformaPdf } from "../lib/proforma";
+import { downloadProformaPdf, shareProformaPdf } from "../lib/proforma";
 import ProformaModal from "../components/crm/ProformaModal";
 
 const PAY_METHOD = ["CASH", "CARD", "UPI", "BANK_TRANSFER", "CHEQUE", "OTHER"];
@@ -427,6 +427,10 @@ export default function Invoices() {
         onConfirm={(percent) => {
           downloadProformaPdf(proforma, { percent });
           flash("success", `Proforma (${percent}%) for quotation #${proforma.quotation_number} downloaded.`);
+        }}
+        onShare={async (percent) => {
+          const result = await shareProformaPdf(proforma, { percent });
+          flash("success", result === "shared" ? "Proforma shared." : "Proforma downloaded.");
         }}
       />
       <PaymentModal invoice={paying} onClose={() => setPaying(null)} onDone={(msg) => flash("success", msg)} />

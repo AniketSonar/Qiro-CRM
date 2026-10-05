@@ -35,7 +35,7 @@ import {
   COMPANY_DETAILS,
   BANK_DETAILS
 } from "../lib/quotation";
-import { downloadProformaPdf } from "../lib/proforma";
+import { downloadProformaPdf, shareProformaPdf } from "../lib/proforma";
 import ProformaModal from "../components/crm/ProformaModal";
 
 const QUOTATION_TYPES = [
@@ -1280,6 +1280,13 @@ export default function Quotations() {
         quotation={proformaFor}
         onClose={() => setProformaFor(null)}
         onConfirm={(percent) => handleProforma(proformaFor, percent)}
+        onShare={async (percent) => {
+          const result = await shareProformaPdf(proformaFor, { percent });
+          setFeedback({
+            type: "success",
+            message: result === "shared" ? "Proforma shared." : "Proforma downloaded."
+          });
+        }}
       />
     </AppShell>
   );

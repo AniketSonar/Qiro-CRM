@@ -1,12 +1,15 @@
 import { useState } from "react";
-import { Field, FormModal, Input } from "./form";
+import { Share2 } from "lucide-react";
+import { Field, FormModal, Input, SubtleButton } from "./form";
 import { currency } from "../../lib/crm-data";
 
 const PRESETS = [30, 50, 70, 100];
 
 /** Asks what share of the quotation the proforma should bill, then calls onConfirm(percent). */
-export default function ProformaModal({ quotation, onClose, onConfirm }) {
+export default function ProformaModal({ quotation, onClose, onConfirm, onShare }) {
   const [percent, setPercent] = useState(50);
+  const [sharing, setSharing] = useState(false);
+  const [shareError, setShareError] = useState(null);
   const total = Number(quotation?.total_amount || 0);
   const pct = Math.min(Math.max(Number(percent) || 0, 0), 100);
   const payable = (total * pct) / 100;
@@ -14,6 +17,22 @@ export default function ProformaModal({ quotation, onClose, onConfirm }) {
   const submit = async () => {
     if (!(pct > 0)) throw new Error("Enter a percentage between 1 and 100");
     await onConfirm(pct);
+  };
+
+  const share = async () => {
+    if (!(pct > 0)) {
+      setShareError("Enter a percentage between 1 and 100");
+      return;
+    }
+    setSharing(true);
+    setShareError(null);
+    try {
+      await onShare?.(pct);
+    } catch (err) {
+      setShareError(err?.message || "Failed to share proforma invoice");
+    } finally {
+      setSharing(false);
+    }
   };
 
   return (
@@ -51,6 +70,15 @@ export default function ProformaModal({ quotation, onClose, onConfirm }) {
           </div>
         </div>
       </div>
+      {shareError ? <p className="text-sm font-semibold text-destructive">{shareError}</p> : null}
+      {onShare ? (
+        <div className="flex justify-end">
+          <SubtleButton type="button" onClick={share} disabled={sharing}>
+            <Share2 className="size-4" />
+            {sharing ? "Sharing…" : "Share proforma"}
+          </SubtleButton>
+        </div>
+      ) : null}
     </FormModal>
   );
 }
