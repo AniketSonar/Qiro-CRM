@@ -22,6 +22,7 @@ import {
   Select,
   Textarea,
   formValues,
+  toLocalDateTimeValue,
   toLocalInput
 } from "../components/crm/form";
 import { crud, personLabel, useActivities, useLookups } from "../lib/crm-store";
@@ -60,7 +61,7 @@ function ActivityForm({ open, mode, row, lookups, onClose }) {
     ["lead_id", "contact_id"].forEach((k) => {
       if (body[k]) body[k] = Number(body[k]);
     });
-    if (body.activity_at) body.activity_at = new Date(body.activity_at).toISOString();
+    if (body.activity_at) body.activity_at = toLocalDateTimeValue(body.activity_at);
     if (mode === "edit") await crud.activities.update(row.id, body);
     else await crud.activities.create(body);
   };
