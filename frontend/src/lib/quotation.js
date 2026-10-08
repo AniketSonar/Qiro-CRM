@@ -1423,6 +1423,33 @@ export function buildInvoicePdf(sale, customerName = null, options = {}) {
   y += 10;
   doc.text("Terms: Payment is due as per agreed commercial terms. All disputes subject to Pune jurisdiction.", M, y);
 
+  const signatureImage = raw.signature_image;
+  const stampImage = raw.stamp_image;
+  if (signatureImage || stampImage) {
+    const pageH = doc.internal.pageSize.getHeight();
+    const imageW = 132;
+    const imageH = 54;
+    const rightX = M + contentW - imageW;
+    const stampY = Math.min(y + 18 + imageH + 12, pageH - M - imageH - 20);
+    const signatureY = stampY - imageH - 12;
+    if (signatureImage) {
+      doc.addImage(signatureImage, rightX, signatureY, imageW, imageH, undefined, "FAST");
+    }
+    if (stampImage) {
+      doc.addImage(stampImage, rightX, stampY, imageW, imageH, undefined, "FAST");
+      doc.setFont("times", "bold");
+      doc.setFontSize(7);
+      doc.setTextColor(30, 30, 30);
+      const authorisation = doc.splitTextToSize(
+        `Authorised Signatory`,
+        imageW + 36
+      );
+      authorisation.forEach((line, index) => {
+        doc.text(line, rightX + imageW / 2, stampY + imageH + 12 + index * 9, { align: "center" });
+      });
+    }
+  }
+
   return doc;
 }
 

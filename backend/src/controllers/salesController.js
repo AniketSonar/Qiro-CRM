@@ -10,6 +10,16 @@ const generateInvoiceNumber = () => {
 };
 
 const PAYMENT_STATUSES = ["UNPAID", "PARTIAL", "PAID", "REFUNDED"];
+const IMAGE_DATA_URL = /^data:image\/(?:png|jpe?g|webp);base64,[A-Za-z0-9+/=\s]+$/i;
+const MAX_IMAGE_DATA_URL_LENGTH = 700000;
+
+function validateInvoiceImage(value, label) {
+    if (value === undefined || value === null || value === "") return null;
+    if (typeof value !== "string" || value.length > MAX_IMAGE_DATA_URL_LENGTH || !IMAGE_DATA_URL.test(value)) {
+        throw new Error(`${label} must be a PNG, JPG, or WEBP image smaller than 500 KB`);
+    }
+    return value;
+}
 
 function resolvePayment(total, requestedStatus, requestedAmount) {
     const invoiceTotal = Math.max(0, Number(total) || 0);
@@ -75,7 +85,9 @@ const createSale = async (req, res) => {
             amount_paid = 0,
             payment_method,
             sale_date,
-            notes
+            notes,
+            signature_image,
+            stamp_image
         } = req.body || {};
 
         if (!customer_id) {
@@ -107,6 +119,21 @@ const createSale = async (req, res) => {
             return res.status(400).json({
                 success: false,
                 message: "Discount and tax cannot be negative"
+            });
+        }
+
+        let signatureImage;
+        let stampImage;
+        try {
+            signatureImage = validateInvoiceImage(signature_image, "Signature");
+            stampImage = validateInvoiceImage(stamp_image, "Stamp");
+        } catch (error) {
+            return res.status(400).json({ success: false, message: error.message });
+        }
+        if (!signatureImage || !stampImage) {
+            return res.status(400).json({
+                success: false,
+                message: "Signature and stamp are required to create an invoice"
             });
         }
 
@@ -342,11 +369,13 @@ const createSale = async (req, res) => {
                 gst_mode,
                 gst_rate,
                 cgst_amount,
-                sgst_amount
+                sgst_amount,
+                signature_image,
+                stamp_image
             )
             VALUES (
                 $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,
-                $11,$12,$13,$14,$15,$16,$17,$18,$19,$20
+                $11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22
             )
             RETURNING *
             `,
@@ -370,7 +399,9 @@ const createSale = async (req, res) => {
                 finalGstMode,
                 finalGstRate,
                 cgstAmount,
-                sgstAmount
+                sgstAmount,
+                signatureImage,
+                stampImage
             ]
         );
 
@@ -797,7 +828,9 @@ const updateSale = async (req, res) => {
             discount,
             tax,
             gst_mode,
-            gst_rate
+            gst_rate,
+            signature_image,
+            stamp_image
         } = req.body || {};
 
 
@@ -825,6 +858,19 @@ const updateSale = async (req, res) => {
 
         const sale =
             existing.rows[0];
+
+        let signatureImage;
+        let stampImage;
+        try {
+            signatureImage = signature_image === undefined
+                ? sale.signature_image
+                : validateInvoiceImage(signature_image, "Signature");
+            stampImage = stamp_image === undefined
+                ? sale.stamp_image
+                : validateInvoiceImage(stamp_image, "Stamp");
+        } catch (error) {
+            return res.status(400).json({ success: false, message: error.message });
+        }
 
 
         if (
@@ -973,10 +1019,14 @@ const updateSale = async (req, res) => {
 
                     sgst_amount = $12,
 
+                    signature_image = $13,
+
+                    stamp_image = $14,
+
                     updated_at =
                         CURRENT_TIMESTAMP
 
-                WHERE id = $13
+                WHERE id = $15
 
                 RETURNING *
                 `,
@@ -995,6 +1045,8 @@ const updateSale = async (req, res) => {
                     newGstRate,
                     newCgstAmount,
                     newSgstAmount,
+                    signatureImage,
+                    stampImage,
                     id
                 ]
             );
@@ -1039,7 +1091,30 @@ const convertQuotationToInvoice = async (req, res) => {
 
     try {
         const { quotationId } = req.params;
-        const { payment_status, amount_paid, payment_method, sale_date, notes } = req.body || {};
+        const {
+            payment_status,
+            amount_paid,
+            payment_method,
+            sale_date,
+            notes,
+            signature_image,
+            stamp_image
+        } = req.body || {};
+
+        let signatureImage;
+        let stampImage;
+        try {
+            signatureImage = validateInvoiceImage(signature_image, "Signature");
+            stampImage = validateInvoiceImage(stamp_image, "Stamp");
+        } catch (error) {
+            return res.status(400).json({ success: false, message: error.message });
+        }
+        if (!signatureImage || !stampImage) {
+            return res.status(400).json({
+                success: false,
+                message: "Signature and stamp are required to create an invoice"
+            });
+        }
 
         await client.query("BEGIN");
 
@@ -1166,8 +1241,9 @@ const convertQuotationToInvoice = async (req, res) => {
                 product_service, description, sale_amount, discount, tax, final_amount,
                 payment_status, amount_paid, balance_due, payment_method, sale_date, notes,
                 gst_mode, gst_rate, cgst_amount, sgst_amount
+                , signature_image, stamp_image
             ) VALUES (
-                $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20
+                $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22
             ) RETURNING *`,
             [
                 customer.id,
@@ -1189,7 +1265,9 @@ const convertQuotationToInvoice = async (req, res) => {
                 breakdown.gst_mode,
                 gstRate,
                 breakdown.cgst_amount,
-                breakdown.sgst_amount
+                breakdown.sgst_amount,
+                signatureImage,
+                stampImage
             ]
         );
 

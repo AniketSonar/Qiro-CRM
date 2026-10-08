@@ -41,6 +41,58 @@ const clientOf = (q) =>
   q.lead_company ||
   "Customer";
 
+const IMAGE_MAX_BYTES = 500 * 1024;
+
+const readInvoiceImage = (file, label) =>
+  new Promise((resolve, reject) => {
+    if (!file || file.size === 0) {
+      resolve(undefined);
+      return;
+    }
+    if (!["image/png", "image/jpeg", "image/webp"].includes(file.type)) {
+      reject(new Error(`${label} must be a PNG, JPG, or WEBP image`));
+      return;
+    }
+    if (file.size > IMAGE_MAX_BYTES) {
+      reject(new Error(`${label} must be smaller than 500 KB`));
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(new Error(`Could not read the ${label.toLowerCase()} image`));
+    reader.readAsDataURL(file);
+  });
+
+function InvoiceBrandingFields({ invoice }) {
+  const [signatureName, setSignatureName] = useState("");
+  const [stampName, setStampName] = useState("");
+
+  return (
+    <div className="space-y-3 sm:col-span-2">
+      <div>
+        <p className="text-sm font-semibold">Invoice sign and stamp</p>
+        <p className="text-xs text-muted-foreground">Both files are required. PNG, JPG, or WEBP images, maximum 500 KB each.</p>
+      </div>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Field label="Authorized signature" required>
+          <label className="inline-flex h-10 w-full cursor-pointer items-center justify-center gap-2 rounded-xl border border-border bg-card px-4 text-center text-sm font-semibold text-muted-foreground transition-colors hover:text-foreground disabled:opacity-60">
+            <span className="truncate">{signatureName || "Choose signature file"}</span>
+            <Input type="file" name="signature_image" accept="image/png,image/jpeg,image/webp" required className="sr-only" onChange={(event) => setSignatureName(event.target.files?.[0]?.name || "")} />
+          </label>
+          {invoice?.signature_image && <img src={invoice.signature_image} alt="Current authorized signature" className="mt-2 h-12 max-w-full object-contain object-left" />}
+        </Field>
+        <Field label="Company stamp" required>
+          <label className="inline-flex h-10 w-full cursor-pointer items-center justify-center gap-2 rounded-xl border border-border bg-card px-4 text-center text-sm font-semibold text-muted-foreground transition-colors hover:text-foreground disabled:opacity-60">
+            <span className="truncate">{stampName || "Choose stamp file"}</span>
+            <Input type="file" name="stamp_image" accept="image/png,image/jpeg,image/webp" required className="sr-only" onChange={(event) => setStampName(event.target.files?.[0]?.name || "")} />
+          </label>
+          {invoice?.stamp_image && <img src={invoice.stamp_image} alt="Current company stamp" className="mt-2 h-12 max-w-full object-contain object-left" />}
+        </Field>
+      </div>
+    </div>
+  );
+}
+
 /* ---------- create invoice from an accepted quotation ---------- */
 
 function CreateInvoiceModal({ quotation, onClose, onDone }) {
@@ -55,11 +107,20 @@ function CreateInvoiceModal({ quotation, onClose, onDone }) {
     if (status === "PARTIAL" && (paidNum <= 0 || paidNum >= total)) {
       throw new Error("For a partial payment enter an amount above 0 and below the total");
     }
+    if (!fd.get("signature_image")?.size || !fd.get("stamp_image")?.size) {
+      throw new Error("Signature and stamp are required to create an invoice");
+    }
+    const [signature_image, stamp_image] = await Promise.all([
+      readInvoiceImage(fd.get("signature_image"), "Signature"),
+      readInvoiceImage(fd.get("stamp_image"), "Stamp")
+    ]);
     await crud.sales.convertQuotation(quotation.id, {
       payment_status: status,
       amount_paid: paidNum,
       payment_method: fd.get("payment_method") || undefined,
-      sale_date: fd.get("sale_date") || undefined
+      sale_date: fd.get("sale_date") || undefined,
+      signature_image,
+      stamp_image
     });
     onDone(`Invoice created from quotation #${quotation.quotation_number}. The quotation has been removed.`);
   };
@@ -95,6 +156,7 @@ function CreateInvoiceModal({ quotation, onClose, onDone }) {
         <Field label="Invoice date">
           <Input type="date" name="sale_date" defaultValue={toDateInput(new Date().toISOString())} />
         </Field>
+        <InvoiceBrandingFields />
         <div className="rounded-lg border border-border bg-muted/10 p-3 text-xs sm:col-span-2 space-y-1">
           <div className="flex justify-between text-muted-foreground"><span>Invoice total (as quoted):</span><span>{currency(total)}</span></div>
           <div className="flex justify-between text-emerald-600"><span>Paid:</span><span>{currency(paidNum)}</span></div>

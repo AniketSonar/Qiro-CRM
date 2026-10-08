@@ -122,6 +122,8 @@ const initSalesGstSchema = async () => {
         ALTER TABLE sales ADD COLUMN IF NOT EXISTS quotation_id INTEGER;
         ALTER TABLE sales ADD COLUMN IF NOT EXISTS amount_paid NUMERIC(12,2) NOT NULL DEFAULT 0;
         ALTER TABLE sales ADD COLUMN IF NOT EXISTS balance_due NUMERIC(12,2) NOT NULL DEFAULT 0;
+        ALTER TABLE sales ADD COLUMN IF NOT EXISTS signature_image TEXT;
+        ALTER TABLE sales ADD COLUMN IF NOT EXISTS stamp_image TEXT;
         ALTER TABLE sales DROP CONSTRAINT IF EXISTS sale_payment_status_check;
         UPDATE sales
         SET amount_paid = CASE
